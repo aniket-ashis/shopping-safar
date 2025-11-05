@@ -5,6 +5,12 @@ import {
   sendAccountCredentialsEmail,
   sendOrderConfirmationEmail,
 } from "../utils/email.js";
+import {
+  validateShippingAddress,
+  validatePaymentMethod,
+  validateQuantity,
+  validatePrice,
+} from "../utils/validation.js";
 import crypto from "crypto";
 
 /**
@@ -28,10 +34,32 @@ export const createOrder = async (req, res) => {
     const isGuest = !req.user; // No user means guest
     let userId = req.user?.userId;
 
-    if (!items || items.length === 0) {
+    // Validate cart is not empty
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
         message: "Order must contain at least one item",
+      });
+    }
+
+    // Validate shipping address
+    const addressValidation = validateShippingAddress(shippingInfo);
+    if (!addressValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid shipping information",
+        errors: addressValidation.errors,
+      });
+    }
+
+    // Validate payment method
+    const paymentValidation = validatePaymentMethod(
+      paymentMethod || "cash_on_delivery"
+    );
+    if (!paymentValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: paymentValidation.error,
       });
     }
 
@@ -39,34 +67,55 @@ export const createOrder = async (req, res) => {
     if (isGuest) {
       const { email, fullName } = shippingInfo;
 
-      if (!email) {
-        return res.status(400).json({
-          success: false,
-          message: "Email is required for guest checkout",
-        });
-      }
-
       // Check if email already exists
-      const { data: existingUser } = await supabase
+      const { data: existingUser, error: userCheckError } = await supabase
         .from("users")
         .select("id, email")
-        .eq("email", email)
-        .single();
+        .eq("email", email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (userCheckError && userCheckError.code !== "PGRST116") {
+        // PGRST116 is "not found" - that's OK
+        console.error("Error checking existing user:", userCheckError);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to verify account. Please try again.",
+        });
+      }
 
       if (existingUser) {
         // User exists, use existing user ID
         userId = existingUser.id;
       } else {
         // Create new account for guest
-        const generatedPassword = generateRandomPassword();
-        const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+        let generatedPassword;
+        try {
+          generatedPassword = generateRandomPassword();
+        } catch (error) {
+          console.error("Error generating password:", error);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to create account. Please try again.",
+          });
+        }
+
+        let hashedPassword;
+        try {
+          hashedPassword = await bcrypt.hash(generatedPassword, 10);
+        } catch (error) {
+          console.error("Error hashing password:", error);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to create account. Please try again.",
+          });
+        }
 
         const { data: newUser, error: userError } = await supabase
           .from("users")
           .insert([
             {
-              name: fullName || email.split("@")[0],
-              email,
+              name: (fullName || email.split("@")[0]).trim(),
+              email: email.trim().toLowerCase(),
               password: hashedPassword,
               role: "customer",
             },
@@ -76,45 +125,207 @@ export const createOrder = async (req, res) => {
 
         if (userError) {
           console.error("Error creating guest user:", userError);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to create account",
-            error:
-              process.env.NODE_ENV === "development"
-                ? userError.message
-                : undefined,
-          });
-        }
+          // Handle duplicate email error
+          if (
+            userError.code === "23505" ||
+            userError.message?.includes("unique")
+          ) {
+            // Email already exists, try to fetch it
+            const { data: existingUserRetry } = await supabase
+              .from("users")
+              .select("id, email")
+              .eq("email", email.trim().toLowerCase())
+              .single();
 
-        userId = newUser.id;
+            if (existingUserRetry) {
+              userId = existingUserRetry.id;
+            } else {
+              return res.status(500).json({
+                success: false,
+                message: "Account already exists. Please login to continue.",
+              });
+            }
+          } else {
+            return res.status(500).json({
+              success: false,
+              message: "Failed to create account. Please try again.",
+              error:
+                process.env.NODE_ENV === "development"
+                  ? userError.message
+                  : undefined,
+            });
+          }
+        } else {
+          userId = newUser.id;
 
-        // Send account credentials email (sequential - must complete before order)
-        const emailResult = await sendAccountCredentialsEmail(
-          email,
-          generatedPassword
-        );
+          // Send account credentials email (sequential - must complete before order)
+          // Don't fail order creation if email fails
+          try {
+            const emailResult = await sendAccountCredentialsEmail(
+              email,
+              generatedPassword
+            );
 
-        if (!emailResult.success) {
-          console.warn(
-            "Failed to send account credentials email:",
-            emailResult
-          );
-          // Continue with order creation even if email fails
+            if (!emailResult.success) {
+              console.warn(
+                "Failed to send account credentials email:",
+                emailResult
+              );
+              // Continue with order creation even if email fails
+            }
+          } catch (emailError) {
+            console.error(
+              "Error sending account credentials email:",
+              emailError
+            );
+            // Continue with order creation even if email fails
+          }
         }
       }
     }
 
-    // Calculate total from items if not provided
-    let calculatedTotal = total;
-    if (!calculatedTotal && items) {
-      calculatedTotal = items.reduce((sum, item) => {
-        const itemPrice =
-          item.variant?.price ||
-          item.product?.base_price ||
-          item.product?.price ||
-          0;
-        return sum + itemPrice * item.quantity;
-      }, 0);
+    // Validate and re-fetch all items to ensure they still exist and get current prices/stock
+    const validatedItems = [];
+    const itemErrors = [];
+
+    for (const item of items) {
+      const productId = item.product?.id || item.product_id;
+      const variantId = item.variant?.id || item.variant_id || null;
+      const quantity = item.quantity;
+
+      if (!productId) {
+        itemErrors.push("One or more products are missing");
+        continue;
+      }
+
+      // Validate quantity
+      const quantityValidation = validateQuantity(quantity);
+      if (!quantityValidation.valid) {
+        itemErrors.push(`Invalid quantity for product ${productId}`);
+        continue;
+      }
+
+      // Fetch current product data
+      const { data: currentProduct, error: productError } = await supabase
+        .from("products")
+        .select("id, name, base_price, price")
+        .eq("id", productId)
+        .single();
+
+      if (productError || !currentProduct) {
+        itemErrors.push(`Product ${productId} no longer available`);
+        continue;
+      }
+
+      let currentVariant = null;
+      let itemPrice = currentProduct.base_price || currentProduct.price || 0;
+      let availableStock = null;
+
+      // Fetch variant if provided
+      if (variantId) {
+        const { data: variant, error: variantError } = await supabase
+          .from("product_variants")
+          .select("id, name, price, stock, product_id")
+          .eq("id", variantId)
+          .eq("product_id", productId)
+          .single();
+
+        if (variantError || !variant) {
+          itemErrors.push(
+            `Variant ${variantId} no longer available for product ${productId}`
+          );
+          continue;
+        }
+
+        currentVariant = variant;
+        itemPrice = variant.price || itemPrice;
+        availableStock = variant.stock;
+
+        // Check stock availability
+        if (availableStock < quantity) {
+          itemErrors.push(
+            `Insufficient stock for ${currentProduct.name}${
+              variant.name ? ` (${variant.name})` : ""
+            }. Only ${availableStock} available.`
+          );
+          continue;
+        }
+      }
+
+      validatedItems.push({
+        product: currentProduct,
+        variant: currentVariant,
+        product_id: productId,
+        variant_id: variantId,
+        variant_name: currentVariant?.name || null,
+        quantity: quantityValidation.value,
+        price: itemPrice,
+        availableStock,
+      });
+    }
+
+    // If any items failed validation, return error
+    if (itemErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Some items are no longer available or have insufficient stock",
+        errors: itemErrors,
+        unavailableItems: itemErrors,
+      });
+    }
+
+    // Re-calculate total from current prices
+    const calculatedTotal = validatedItems.reduce((sum, item) => {
+      return sum + item.price * item.quantity;
+    }, 0);
+
+    // Validate calculated total matches submitted total (allow 1% variance for rounding)
+    const submittedTotal = total || 0;
+    const variance = Math.abs(calculatedTotal - submittedTotal);
+    const variancePercent =
+      submittedTotal > 0 ? (variance / submittedTotal) * 100 : 0;
+
+    if (variancePercent > 1) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Order total has changed. Please review your cart and try again.",
+        calculatedTotal,
+        submittedTotal,
+      });
+    }
+
+    // Check for duplicate orders (same items, same user, within last 30 seconds)
+    if (userId) {
+      const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+      const { data: recentOrders } = await supabase
+        .from("orders")
+        .select("id, created_at")
+        .eq("user_id", userId)
+        .gte("created_at", thirtySecondsAgo)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (recentOrders && recentOrders.length > 0) {
+        // Check if recent order has same items count
+        const { data: recentOrderItems } = await supabase
+          .from("order_items")
+          .select("id")
+          .eq("order_id", recentOrders[0].id);
+
+        if (
+          recentOrderItems &&
+          recentOrderItems.length === validatedItems.length
+        ) {
+          return res.status(409).json({
+            success: false,
+            message:
+              "Duplicate order detected. Your order may have already been placed.",
+            orderId: recentOrders[0].id,
+          });
+        }
+      }
     }
 
     // Create order
@@ -172,32 +383,55 @@ export const createOrder = async (req, res) => {
 
     if (orderError) throw orderError;
 
-    // Create order items with variant information
-    const orderItems = items.map((item) => {
-      const itemPrice =
-        item.variant?.price ||
-        item.product?.base_price ||
-        item.product?.price ||
-        0;
-      return {
-        order_id: order.id,
-        product_id: item.product?.id || item.product_id,
-        variant_id: item.variant?.id || item.variant_id || null,
-        variant_name: item.variant?.name || null,
-        quantity: item.quantity,
-        price: itemPrice,
-      };
-    });
+    // Create order items with validated data
+    const orderItems = validatedItems.map((item) => ({
+      order_id: order.id,
+      product_id: item.product_id,
+      variant_id: item.variant_id,
+      variant_name: item.variant_name,
+      quantity: item.quantity,
+      price: item.price,
+    }));
 
     const { error: itemsError } = await supabase
       .from("order_items")
       .insert(orderItems);
 
-    if (itemsError) throw itemsError;
+    if (itemsError) {
+      console.error("Error creating order items:", itemsError);
+      // Try to delete the order if items creation fails
+      await supabase.from("orders").delete().eq("id", order.id);
+      throw itemsError;
+    }
 
-    // Clear cart if user is logged in
+    // Update stock for variants (reduce stock)
+    for (const item of validatedItems) {
+      if (item.variant_id && item.availableStock !== null) {
+        const newStock = item.availableStock - item.quantity;
+        const { error: stockError } = await supabase
+          .from("product_variants")
+          .update({ stock: newStock })
+          .eq("id", item.variant_id);
+
+        if (stockError) {
+          console.error(
+            "Error updating stock for variant:",
+            item.variant_id,
+            stockError
+          );
+          // Log error but don't fail order - stock can be adjusted manually
+        }
+      }
+    }
+
+    // Clear cart if user is logged in (don't fail order if this fails)
     if (userId && !isGuest) {
-      await supabase.from("cart_items").delete().eq("user_id", userId);
+      try {
+        await supabase.from("cart_items").delete().eq("user_id", userId);
+      } catch (cartError) {
+        console.error("Error clearing cart after order:", cartError);
+        // Don't fail order - cart can be cleared separately
+      }
     }
 
     // Fetch full order with items for email
@@ -208,23 +442,30 @@ export const createOrder = async (req, res) => {
         *,
         order_items:order_items(
           *,
-          product:products(*)
+          product:products(*),
+          variant:product_variants(*)
         )
       `
       )
       .eq("id", order.id)
       .single();
 
+    // Send order confirmation email (sequential - after order creation)
+    // Don't fail order if email fails
     if (!fetchError && fullOrder) {
-      // Send order confirmation email (sequential - after order creation)
-      const emailResult = await sendOrderConfirmationEmail(
-        shippingInfo.email,
-        fullOrder
-      );
+      try {
+        const emailResult = await sendOrderConfirmationEmail(
+          shippingInfo.email,
+          fullOrder
+        );
 
-      if (!emailResult.success) {
-        console.warn("Failed to send order confirmation email:", emailResult);
-        // Continue even if email fails
+        if (!emailResult.success) {
+          console.warn("Failed to send order confirmation email:", emailResult);
+          // Continue even if email fails
+        }
+      } catch (emailError) {
+        console.error("Error sending order confirmation email:", emailError);
+        // Continue even if email fails - order is already created
       }
     }
 

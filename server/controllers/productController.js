@@ -1,4 +1,5 @@
 import { supabase } from "../utils/supabase.js";
+import { validatePrice, validateStock } from "../utils/validation.js";
 
 export const getProducts = async (req, res) => {
   try {
@@ -239,6 +240,62 @@ export const createProduct = async (req, res) => {
       });
     }
 
+    // Validate required fields
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Product name is required",
+      });
+    }
+
+    // Validate price
+    if (base_price !== undefined && base_price !== null) {
+      const priceValidation = validatePrice(base_price);
+      if (!priceValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: priceValidation.error,
+        });
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Product price is required",
+      });
+    }
+
+    // Validate category if provided
+    if (category_id) {
+      const { data: category } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("id", category_id)
+        .single();
+
+      if (!category) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid category ID",
+        });
+      }
+    }
+
+    // Validate brand if provided
+    if (brand_id) {
+      const { data: brand } = await supabase
+        .from("brands")
+        .select("id")
+        .eq("id", brand_id)
+        .single();
+
+      if (!brand) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid brand ID",
+        });
+      }
+    }
+
     const productSlug = slug || generateSlug(name);
 
     // Check if slug already exists
@@ -246,7 +303,7 @@ export const createProduct = async (req, res) => {
       .from("products")
       .select("id")
       .eq("slug", productSlug)
-      .single();
+      .maybeSingle();
 
     if (existingSlug) {
       return res.status(400).json({
@@ -322,6 +379,49 @@ export const updateProduct = async (req, res) => {
       });
     }
 
+    // Validate price if provided
+    if (base_price !== undefined && base_price !== null) {
+      const priceValidation = validatePrice(base_price);
+      if (!priceValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: priceValidation.error,
+        });
+      }
+    }
+
+    // Validate category if provided
+    if (category_id !== undefined && category_id !== null) {
+      const { data: category } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("id", category_id)
+        .single();
+
+      if (!category) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid category ID",
+        });
+      }
+    }
+
+    // Validate brand if provided
+    if (brand_id !== undefined && brand_id !== null) {
+      const { data: brand } = await supabase
+        .from("brands")
+        .select("id")
+        .eq("id", brand_id)
+        .single();
+
+      if (!brand) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid brand ID",
+        });
+      }
+    }
+
     // Handle slug update
     let productSlug = slug || existing.slug;
     if (name && !slug) {
@@ -387,9 +487,108 @@ export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
+      });
+    }
+
+    // Check if product exists
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("id, name")
+      .eq("id", id)
+      .single();
+
+    if (productError || !product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // Check if product has active orders (not cancelled)
+    const { data: activeOrders } = await supabase
+      .from("order_items")
+      .select("order_id")
+      .eq("product_id", id)
+      .limit(1);
+
+    if (activeOrders && activeOrders.length > 0) {
+      // Check if any of these orders are not cancelled
+      const orderIds = activeOrders.map((item) => item.order_id);
+      const { data: orders } = await supabase
+        .from("orders")
+        .select("id, status")
+        .in("id", orderIds)
+        .neq("status", "cancelled")
+        .limit(1);
+
+      if (orders && orders.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Cannot delete product with active orders. Please cancel or complete all orders first.",
+          activeOrdersCount: orders.length,
+        });
+      }
+    }
+
+    // Check if product is in any active carts
+    const { data: cartItems } = await supabase
+      .from("cart_items")
+      .select("id")
+      .eq("product_id", id)
+      .limit(1);
+
+    if (cartItems && cartItems.length > 0) {
+      // Warn but allow deletion (carts will show error when user tries to checkout)
+      console.warn(
+        `Product ${id} is in ${cartItems.length} cart(s). Deleting anyway.`
+      );
+    }
+
+    // Check if product has variants
+    const { data: variants } = await supabase
+      .from("product_variants")
+      .select("id")
+      .eq("product_id", id)
+      .limit(1);
+
+    if (variants && variants.length > 0) {
+      // Delete variants first (cascade delete should handle this, but we'll do it explicitly)
+      const { error: variantsError } = await supabase
+        .from("product_variants")
+        .delete()
+        .eq("product_id", id);
+
+      if (variantsError) {
+        console.error("Error deleting product variants:", variantsError);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to delete product variants. Please try again.",
+        });
+      }
+    }
+
+    // Delete product
     const { error } = await supabase.from("products").delete().eq("id", id);
 
-    if (error) throw error;
+    if (error) {
+      // Handle foreign key constraint errors
+      if (error.code === "23503" || error.message?.includes("foreign key")) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Cannot delete product. It is referenced by other records (orders, variants, etc.).",
+        });
+      }
+      throw error;
+    }
+
+    // Log deletion (for audit trail)
+    console.log(`Product ${id} (${product.name}) deleted by admin`);
 
     res.json({
       success: true,

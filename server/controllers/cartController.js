@@ -1,4 +1,9 @@
 import { supabase } from "../utils/supabase.js";
+import {
+  validateQuantity,
+  validatePrice,
+  fetchVariantImages,
+} from "../utils/validation.js";
 
 export const getCart = async (req, res) => {
   try {
@@ -29,9 +34,15 @@ export const getCart = async (req, res) => {
       throw error;
     }
 
+    // Fetch variant images for cart items
+    const cartItemsWithImages = await fetchVariantImages(
+      supabase,
+      cartItems || []
+    );
+
     res.json({
       success: true,
-      items: cartItems || [],
+      items: cartItemsWithImages,
     });
   } catch (error) {
     console.error("Get cart error:", error);
@@ -57,49 +68,77 @@ export const addToCart = async (req, res) => {
       });
     }
 
-    if (!productId || !quantity || quantity < 1) {
+    // Validate quantity
+    const quantityValidation = validateQuantity(quantity);
+    if (!quantityValidation.valid) {
       return res.status(400).json({
         success: false,
-        message: "Product ID and quantity are required",
+        message: quantityValidation.error,
       });
     }
 
-    // Check if product exists
-    const { data: product } = await supabase
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
+      });
+    }
+
+    // Check if product exists and is active
+    const { data: product, error: productError } = await supabase
       .from("products")
-      .select("id")
+      .select("id, base_price, price")
       .eq("id", productId)
       .single();
 
-    if (!product) {
+    if (productError || !product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found",
+        message: "Product not found or no longer available",
       });
     }
 
+    let maxStock = null;
+    let variantData = null;
+
     // If variantId provided, verify it exists and belongs to product
     if (variantId) {
-      const { data: variant } = await supabase
+      const { data: variant, error: variantError } = await supabase
         .from("product_variants")
-        .select("id, stock")
+        .select("id, stock, price, product_id")
         .eq("id", variantId)
         .eq("product_id", productId)
         .single();
 
-      if (!variant) {
+      if (variantError || !variant) {
         return res.status(404).json({
           success: false,
-          message: "Variant not found",
+          message: "Variant not found or does not belong to this product",
+        });
+      }
+
+      variantData = variant;
+      maxStock = variant.stock;
+
+      // Validate quantity against stock
+      const stockValidation = validateQuantity(quantity, maxStock);
+      if (!stockValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: stockValidation.error,
         });
       }
 
       if (variant.stock < quantity) {
         return res.status(400).json({
           success: false,
-          message: "Insufficient stock",
+          message: `Insufficient stock. Only ${variant.stock} available.`,
         });
       }
+    } else {
+      // Check product stock if no variant (assuming product has stock field)
+      // For products without variants, we might need to check a stock field
+      // This is a placeholder - adjust based on your schema
     }
 
     // Check if item already in cart (same product and variant)
@@ -119,22 +158,32 @@ export const addToCart = async (req, res) => {
       await existingItemQuery.maybeSingle();
 
     if (existingItem && !existingError) {
+      // Check stock before updating quantity
+      const newQuantity = existingItem.quantity + quantity;
+      if (maxStock !== null && newQuantity > maxStock) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot add more items. Only ${maxStock} available in stock.`,
+        });
+      }
+
       // Update quantity
       const { data: updatedItem, error } = await supabase
         .from("cart_items")
-        .update({ quantity: existingItem.quantity + quantity })
+        .update({ quantity: newQuantity })
         .eq("id", existingItem.id)
         .select(
           `
           *,
-          product:products(*)
+          product:products(*),
+          variant:product_variants(*)
         `
         )
         .single();
 
       if (error) throw error;
 
-      // Get all cart items
+      // Get all cart items with variant images
       const { data: cartItems } = await supabase
         .from("cart_items")
         .select(
@@ -146,10 +195,15 @@ export const addToCart = async (req, res) => {
         )
         .eq("user_id", userId);
 
+      const cartItemsWithImages = await fetchVariantImages(
+        supabase,
+        cartItems || []
+      );
+
       return res.json({
         success: true,
         message: "Item updated in cart",
-        items: cartItems || [],
+        items: cartItemsWithImages,
       });
     }
 
@@ -161,34 +215,44 @@ export const addToCart = async (req, res) => {
           user_id: userId,
           product_id: productId,
           variant_id: variantId || null,
-          quantity,
+          quantity: quantityValidation.value,
         },
       ])
       .select(
         `
         *,
-        product:products(*)
+        product:products(*),
+        variant:product_variants(*)
       `
       )
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("Error adding item to cart:", error);
+      throw error;
+    }
 
-    // Get all cart items
+    // Get all cart items with variant images
     const { data: cartItems } = await supabase
       .from("cart_items")
       .select(
         `
         *,
-        product:products(*)
+        product:products(*),
+        variant:product_variants(*)
       `
       )
       .eq("user_id", userId);
 
+    const cartItemsWithImages = await fetchVariantImages(
+      supabase,
+      cartItems || []
+    );
+
     res.json({
       success: true,
       message: "Item added to cart",
-      items: cartItems || [],
+      items: cartItemsWithImages,
     });
   } catch (error) {
     console.error("Add to cart error:", error);
@@ -214,51 +278,84 @@ export const updateCartItem = async (req, res) => {
       });
     }
 
-    if (!itemId || quantity < 1) {
+    // Validate quantity
+    const quantityValidation = validateQuantity(quantity);
+    if (!quantityValidation.valid) {
       return res.status(400).json({
         success: false,
-        message: "Item ID and valid quantity are required",
+        message: quantityValidation.error,
       });
     }
 
-    // Verify item belongs to user
-    const { data: item } = await supabase
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: "Item ID is required",
+      });
+    }
+
+    // Verify item belongs to user and get variant info
+    const { data: item, error: itemError } = await supabase
       .from("cart_items")
-      .select("id")
+      .select(
+        `
+        id,
+        variant_id,
+        variant:product_variants(stock)
+      `
+      )
       .eq("id", itemId)
       .eq("user_id", userId)
       .single();
 
-    if (!item) {
+    if (itemError || !item) {
       return res.status(404).json({
         success: false,
-        message: "Cart item not found",
+        message: "Cart item not found or does not belong to you",
       });
+    }
+
+    // Check stock if variant exists
+    if (item.variant_id && item.variant) {
+      const maxStock = item.variant.stock;
+      const stockValidation = validateQuantity(quantity, maxStock);
+      if (!stockValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: stockValidation.error,
+        });
+      }
     }
 
     // Update quantity
     const { error } = await supabase
       .from("cart_items")
-      .update({ quantity })
+      .update({ quantity: quantityValidation.value })
       .eq("id", itemId);
 
     if (error) throw error;
 
-    // Get all cart items
+    // Get all cart items with variant images
     const { data: cartItems } = await supabase
       .from("cart_items")
       .select(
         `
         *,
-        product:products(*)
+        product:products(*),
+        variant:product_variants(*)
       `
       )
       .eq("user_id", userId);
 
+    const cartItemsWithImages = await fetchVariantImages(
+      supabase,
+      cartItems || []
+    );
+
     res.json({
       success: true,
       message: "Cart item updated",
-      items: cartItems || [],
+      items: cartItemsWithImages,
     });
   } catch (error) {
     console.error("Update cart error:", error);
@@ -307,21 +404,27 @@ export const removeFromCart = async (req, res) => {
 
     if (error) throw error;
 
-    // Get all cart items
+    // Get all cart items with variant images
     const { data: cartItems } = await supabase
       .from("cart_items")
       .select(
         `
         *,
-        product:products(*)
+        product:products(*),
+        variant:product_variants(*)
       `
       )
       .eq("user_id", userId);
 
+    const cartItemsWithImages = await fetchVariantImages(
+      supabase,
+      cartItems || []
+    );
+
     res.json({
       success: true,
       message: "Item removed from cart",
-      items: cartItems || [],
+      items: cartItemsWithImages,
     });
   } catch (error) {
     console.error("Remove from cart error:", error);

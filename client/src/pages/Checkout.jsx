@@ -99,6 +99,60 @@ const Checkout = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate cart is not empty
+    if (cartItems.length === 0) {
+      showError(
+        "Your cart is empty. Please add items before checkout.",
+        "Cart Empty"
+      );
+      navigate(urls.routes.shop);
+      return;
+    }
+
+    // Validate required fields
+    if (!formData.fullName?.trim()) {
+      showError("Full name is required", "Validation Error");
+      return;
+    }
+
+    if (!formData.email?.trim()) {
+      showError("Email is required", "Validation Error");
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      showError("Please enter a valid email address", "Validation Error");
+      return;
+    }
+
+    if (!formData.phone?.trim()) {
+      showError("Phone number is required", "Validation Error");
+      return;
+    }
+
+    if (!formData.address?.trim()) {
+      showError("Address is required", "Validation Error");
+      return;
+    }
+
+    if (!formData.city?.trim()) {
+      showError("City is required", "Validation Error");
+      return;
+    }
+
+    if (!formData.state?.trim()) {
+      showError("State is required", "Validation Error");
+      return;
+    }
+
+    if (!formData.zip?.trim()) {
+      showError("ZIP code is required", "Validation Error");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -108,14 +162,18 @@ const Checkout = () => {
           product: item.product,
           variant: item.variant,
           quantity: item.quantity,
-          product_id: item.product.id,
+          product_id: item.product?.id,
           variant_id: item.variant?.id || null,
         })),
         total: getCartTotal(),
+        paymentMethod: formData.paymentMethod || "cash_on_delivery",
       };
 
       const response = await api.post(urls.api.orders.create, orderData);
+
+      // Clear cart only after successful order
       await clearCart();
+
       showSuccess(
         response.data.isGuest
           ? "Order placed successfully! Check your email for account details and order confirmation."
@@ -125,10 +183,54 @@ const Checkout = () => {
       navigate(`/orders`);
     } catch (error) {
       console.error("Error placing order:", error);
-      const errorMessage =
-        error.response?.data?.message ||
-        "Failed to place order. Please try again.";
-      showError(errorMessage, "Order Failed");
+
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        const errorData = error.response.data;
+        if (errorData.errors && Array.isArray(errorData.errors)) {
+          // Multiple validation errors
+          showError(
+            errorData.message || "Validation failed",
+            "Validation Error",
+            errorData.errors.join("\n")
+          );
+        } else if (
+          errorData.unavailableItems &&
+          Array.isArray(errorData.unavailableItems)
+        ) {
+          // Items unavailable
+          showError(
+            errorData.message || "Some items are no longer available",
+            "Items Unavailable",
+            errorData.unavailableItems.join("\n")
+          );
+          // Reload cart to reflect changes
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
+        } else {
+          showError(
+            errorData.message ||
+              "Failed to place order. Please check your information and try again.",
+            "Order Failed"
+          );
+        }
+      } else if (error.response?.status === 409) {
+        // Duplicate order
+        const errorData = error.response.data;
+        showError(
+          errorData.message || "This order may have already been placed.",
+          "Duplicate Order",
+          errorData.orderId ? `Order ID: ${errorData.orderId}` : ""
+        );
+        navigate(`/orders`);
+      } else {
+        const errorMessage =
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to place order. Please try again.";
+        showError(errorMessage, "Order Failed");
+      }
     } finally {
       setLoading(false);
     }
