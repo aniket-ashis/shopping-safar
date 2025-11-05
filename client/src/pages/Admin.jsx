@@ -81,6 +81,8 @@ const Admin = () => {
   const PackageIcon = getIcon("FaBox");
   const TagIcon = getIcon("FaTag");
   const StarIcon = getIcon("FaStar");
+  const CheckIcon = getIcon("FaCheck");
+  const TimesIcon = getIcon("FaTimes");
 
   // Helper to construct full image URL
   const getImageUrl = (imagePath) => {
@@ -374,6 +376,28 @@ const Admin = () => {
     }
   };
 
+  const handleToggleProductActive = async (product) => {
+    const newStatus = !(product.is_active !== false); // Toggle status
+    try {
+      setLoading(true);
+      await api.put(urls.api.products.toggleActive.replace(":id", product.id), {
+        is_active: newStatus,
+      });
+      showSuccess(
+        `Product ${newStatus ? "activated" : "deactivated"} successfully!`,
+        "Success"
+      );
+      loadProducts();
+    } catch (error) {
+      showError(
+        error.response?.data?.message || "Failed to toggle product status.",
+        "Error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteProduct = async (productId) => {
     showConfirmation({
       title: "Delete Product",
@@ -391,6 +415,28 @@ const Admin = () => {
       confirmLabel: "Delete",
       cancelLabel: "Cancel",
     });
+  };
+
+  const handleToggleVariantActive = async (variant) => {
+    const newStatus = !(variant.is_active !== false); // Toggle status
+    try {
+      setLoading(true);
+      await api.put(urls.api.variants.toggleActive.replace(":id", variant.id), {
+        is_active: newStatus,
+      });
+      showSuccess(
+        `Variant ${newStatus ? "activated" : "deactivated"} successfully!`,
+        "Success"
+      );
+      loadProducts();
+    } catch (error) {
+      showError(
+        error.response?.data?.message || "Failed to toggle variant status.",
+        "Error"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteVariant = async (variantId) => {
@@ -1047,9 +1093,16 @@ const Admin = () => {
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-2">
-                          {product.name}
-                        </h3>
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-lg font-semibold">
+                            {product.name}
+                          </h3>
+                          {product.is_active === false && (
+                            <span className="text-xs bg-red-600 text-white px-2 py-1 rounded">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
                         <p className="text-gray-600 text-sm mb-2">
                           {product.description}
                         </p>
@@ -1071,6 +1124,25 @@ const Admin = () => {
                         </div>
                       </div>
                       <div className="flex space-x-2 ml-4">
+                        <button
+                          onClick={() => handleToggleProductActive(product)}
+                          className={`${
+                            product.is_active !== false
+                              ? "text-green-600 hover:text-green-700"
+                              : "text-red-600 hover:text-red-700"
+                          }`}
+                          title={
+                            product.is_active !== false
+                              ? "Deactivate Product"
+                              : "Activate Product"
+                          }
+                        >
+                          {product.is_active !== false ? (
+                            <CheckIcon />
+                          ) : (
+                            <TimesIcon />
+                          )}
+                        </button>
                         <button
                           onClick={() => handleEditProduct(product)}
                           className="text-primary-main hover:text-primary-dark"
@@ -1285,11 +1357,37 @@ const Admin = () => {
                                       Default
                                     </span>
                                   )}
+                                  {variant.is_active === false && (
+                                    <span className="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded">
+                                      Inactive
+                                    </span>
+                                  )}
                                   <div className="text-sm text-gray-600">
                                     ${variant.price} | Stock: {variant.stock}
                                   </div>
                                 </div>
                                 <div className="flex space-x-2">
+                                  <button
+                                    onClick={() =>
+                                      handleToggleVariantActive(variant)
+                                    }
+                                    className={`${
+                                      variant.is_active !== false
+                                        ? "text-green-600 hover:text-green-700"
+                                        : "text-red-600 hover:text-red-700"
+                                    }`}
+                                    title={
+                                      variant.is_active !== false
+                                        ? "Deactivate Variant"
+                                        : "Activate Variant"
+                                    }
+                                  >
+                                    {variant.is_active !== false ? (
+                                      <CheckIcon />
+                                    ) : (
+                                      <TimesIcon />
+                                    )}
+                                  </button>
                                   <button
                                     onClick={() =>
                                       handleEditVariant(variant, product)

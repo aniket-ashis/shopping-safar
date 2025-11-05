@@ -32,17 +32,24 @@ const ProductCard = ({ product, onAddToCart }) => {
 
   const price = product.minPrice || product.base_price || product.price;
   const hasVariants = product.variantCount > 0;
-  const isOutOfStock = product.totalStock === 0;
+  const isActive = product.isActive !== false; // Default to true if not set
+  const isOutOfStock = product.totalStock === 0 || !isActive;
 
   return (
-    <div className={`${componentStyles.card.hover} relative`}>
+    <div
+      className={`${componentStyles.card.hover} relative ${
+        !isActive ? "opacity-60" : ""
+      }`}
+    >
       <Link to={`/product/${product.id}`}>
         <div className="relative overflow-hidden rounded-lg mb-4">
           {mainImage ? (
             <img
               src={mainImage}
               alt={product.name}
-              className="w-full h-48 md:h-64 object-cover group-hover:scale-110 transition-transform duration-300"
+              className={`w-full h-48 md:h-64 object-cover group-hover:scale-110 transition-transform duration-300 ${
+                !isActive ? "grayscale" : ""
+              }`}
               onError={(e) => {
                 // Prevent infinite loop - if already failed, hide the image
                 if (e.target.dataset.error === "true") {
@@ -69,12 +76,17 @@ const ProductCard = ({ product, onAddToCart }) => {
               <span className="text-gray-400 text-sm">No Image</span>
             </div>
           )}
-          {isOutOfStock && (
+          {!isActive && (
+            <div className="absolute top-2 right-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-semibold">
+              Unavailable
+            </div>
+          )}
+          {isOutOfStock && isActive && (
             <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
               Out of Stock
             </div>
           )}
-          {hasVariants && (
+          {hasVariants && isActive && (
             <div className="absolute top-2 left-2 bg-primary-main text-white px-2 py-1 rounded text-xs font-semibold flex items-center space-x-1">
               <TagIcon className="text-xs" />
               <span>{product.variantCount} Variants</span>
@@ -109,18 +121,22 @@ const ProductCard = ({ product, onAddToCart }) => {
       <button
         onClick={(e) => {
           e.preventDefault();
-          if (onAddToCart) {
+          if (onAddToCart && isActive && !isOutOfStock) {
             onAddToCart(product);
           }
         }}
-        disabled={isOutOfStock}
+        disabled={isOutOfStock || !isActive}
         className={`${
-          isOutOfStock
+          isOutOfStock || !isActive
             ? "bg-gray-300 cursor-not-allowed"
             : componentStyles.button.primary
         } w-full mt-4 text-sm md:text-base`}
       >
-        {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+        {!isActive
+          ? "Unavailable"
+          : isOutOfStock
+          ? "Out of Stock"
+          : "Add to Cart"}
       </button>
     </div>
   );

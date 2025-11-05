@@ -332,6 +332,7 @@ export const urls = {
       detail: "/products/:id",
       search: "/products/search",
       categories: "/products/categories",
+      toggleActive: "/products/:id/toggle-active",
     },
     cart: {
       get: "/cart",
@@ -360,6 +361,7 @@ export const urls = {
     variants: {
       list: "/variants/product/:productId",
       detail: "/variants/:id",
+      toggleActive: "/variants/:id/toggle-active",
     },
     favorites: {
       list: "/favorites",

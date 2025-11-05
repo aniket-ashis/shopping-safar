@@ -87,7 +87,7 @@ export const addToCart = async (req, res) => {
     // Check if product exists and is active
     const { data: product, error: productError } = await supabase
       .from("products")
-      .select("id, base_price, price")
+      .select("id, base_price, price, is_active")
       .eq("id", productId)
       .single();
 
@@ -98,6 +98,14 @@ export const addToCart = async (req, res) => {
       });
     }
 
+    // Check if product is active
+    if (product.is_active === false) {
+      return res.status(400).json({
+        success: false,
+        message: "This product is currently unavailable",
+      });
+    }
+
     let maxStock = null;
     let variantData = null;
 
@@ -105,7 +113,7 @@ export const addToCart = async (req, res) => {
     if (variantId) {
       const { data: variant, error: variantError } = await supabase
         .from("product_variants")
-        .select("id, stock, price, product_id")
+        .select("id, stock, price, product_id, is_active")
         .eq("id", variantId)
         .eq("product_id", productId)
         .single();
@@ -119,6 +127,14 @@ export const addToCart = async (req, res) => {
 
       variantData = variant;
       maxStock = variant.stock;
+
+      // Check if variant is active
+      if (variant.is_active === false) {
+        return res.status(400).json({
+          success: false,
+          message: "This variant is currently unavailable",
+        });
+      }
 
       // Validate quantity against stock
       const stockValidation = validateQuantity(quantity, maxStock);
@@ -317,6 +333,15 @@ export const updateCartItem = async (req, res) => {
 
     // Check stock if variant exists
     if (item.variant_id && item.variant) {
+      // Check if variant is still active
+      if (item.variant.is_active === false) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This variant is no longer available. Please remove it from your cart.",
+        });
+      }
+
       const maxStock = item.variant.stock;
       const stockValidation = validateQuantity(quantity, maxStock);
       if (!stockValidation.valid) {

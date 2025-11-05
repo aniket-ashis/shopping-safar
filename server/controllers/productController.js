@@ -39,9 +39,12 @@ export const getProducts = async (req, res) => {
     // Get variants for each product to calculate total stock
     const productsWithVariants = await Promise.all(
       (products || []).map(async (product) => {
+        // Only get active variants for stock calculation, but include all variants for admin
         const { data: variants } = await supabase
           .from("product_variants")
-          .select("id, name, stock, price, sku, is_default, attributes")
+          .select(
+            "id, name, stock, price, sku, is_default, is_active, attributes"
+          )
           .eq("product_id", product.id)
           .order("is_default", { ascending: false })
           .order("created_at", { ascending: true });
@@ -63,21 +66,34 @@ export const getProducts = async (req, res) => {
           })
         );
 
+        // Calculate total stock only from active variants
+        const activeVariants =
+          variants?.filter((v) => v.is_active !== false) || [];
         const totalStock =
-          variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0;
+          activeVariants.reduce((sum, v) => sum + (v.stock || 0), 0) || 0;
+
+        // Find default variant (prefer active default variant)
         const defaultVariant =
-          variants?.find((v) => v.is_default) || variants?.[0];
-        const minPrice = variants?.length
-          ? Math.min(...variants.map((v) => parseFloat(v.price)))
+          activeVariants.find((v) => v.is_default) ||
+          variants?.find((v) => v.is_default) ||
+          activeVariants[0] ||
+          variants?.[0];
+
+        // Calculate min price from active variants only
+        const minPrice = activeVariants.length
+          ? Math.min(...activeVariants.map((v) => parseFloat(v.price)))
           : parseFloat(product.base_price);
 
         return {
           ...product,
           totalStock,
           variantCount: variants?.length || 0,
+          activeVariantCount: activeVariants.length,
           minPrice,
           defaultVariantId: defaultVariant?.id,
           variants: variantsWithImages, // Include full variant data with images
+          // Check if product is active (default to true if field doesn't exist)
+          isActive: product.is_active !== false,
         };
       })
     );
@@ -168,6 +184,7 @@ export const getProductById = async (req, res) => {
         reviews: reviews || [],
         averageRating: avgRating,
         reviewCount: reviews?.length || 0,
+        isActive: product.is_active !== false,
       },
     });
   } catch (error) {
@@ -477,6 +494,75 @@ export const updateProduct = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update product",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+// Admin: Toggle product active status
+export const toggleProductActive = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_active } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
+      });
+    }
+
+    if (typeof is_active !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "is_active must be a boolean value",
+      });
+    }
+
+    // Check if product exists
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("id, name")
+      .eq("id", id)
+      .single();
+
+    if (productError || !product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // Update active status
+    const { data: updatedProduct, error } = await supabase
+      .from("products")
+      .update({ is_active })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // If deactivating product, also deactivate all variants
+    if (!is_active) {
+      await supabase
+        .from("product_variants")
+        .update({ is_active: false })
+        .eq("product_id", id);
+    }
+
+    res.json({
+      success: true,
+      message: `Product ${
+        is_active ? "activated" : "deactivated"
+      } successfully`,
+      data: updatedProduct,
+    });
+  } catch (error) {
+    console.error("Toggle product active error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to toggle product active status",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }

@@ -234,7 +234,9 @@ const ProductDetail = () => {
   const currentVariant = selectedVariant || product?.variants?.[0];
   const price = currentVariant?.price || product.base_price || product.price;
   const stock = currentVariant?.stock || product.totalStock || 0;
-  const isOutOfStock = stock === 0;
+  const isProductActive = product?.isActive !== false;
+  const isVariantActive = currentVariant?.is_active !== false;
+  const isOutOfStock = stock === 0 || !isProductActive || !isVariantActive;
 
   // Group variants by attributes (e.g., by color, then by size)
   const variantGroups = {};
@@ -308,23 +310,41 @@ const ProductDetail = () => {
                         : "Select Variant"}
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      {variants.map((variant) => (
-                        <button
-                          key={variant.id}
-                          onClick={() => setSelectedVariant(variant)}
-                          disabled={variant.stock === 0}
-                          className={`px-4 py-2 border-2 rounded-lg transition-all ${
-                            selectedVariant?.id === variant.id
-                              ? "border-primary-main bg-primary-main text-white"
-                              : variant.stock === 0
-                              ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
-                              : "border-gray-300 hover:border-primary-main"
-                          }`}
-                        >
-                          {variant.name}
-                          {variant.stock === 0 && " (Out of Stock)"}
-                        </button>
-                      ))}
+                      {variants.map((variant) => {
+                        const variantIsActive = variant.is_active !== false;
+                        const variantIsOutOfStock = variant.stock === 0;
+                        const variantIsDisabled =
+                          !variantIsActive || variantIsOutOfStock;
+
+                        return (
+                          <button
+                            key={variant.id}
+                            onClick={() => {
+                              if (!variantIsDisabled) {
+                                setSelectedVariant(variant);
+                              }
+                            }}
+                            disabled={variantIsDisabled}
+                            className={`px-4 py-2 border-2 rounded-lg transition-all ${
+                              selectedVariant?.id === variant.id
+                                ? variantIsActive
+                                  ? "border-primary-main bg-primary-main text-white"
+                                  : "border-red-500 bg-red-500 text-white"
+                                : !variantIsActive
+                                ? "border-red-500 bg-red-100 text-red-700 cursor-not-allowed opacity-75"
+                                : variantIsOutOfStock
+                                ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
+                                : "border-gray-300 hover:border-primary-main"
+                            }`}
+                          >
+                            {variant.name}
+                            {!variantIsActive && " (Inactive)"}
+                            {variantIsOutOfStock &&
+                              variantIsActive &&
+                              " (Out of Stock)"}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -349,7 +369,15 @@ const ProductDetail = () => {
 
             {/* Stock Status */}
             <div className="mb-6">
-              {isOutOfStock ? (
+              {!isProductActive ? (
+                <p className="text-red-600 font-semibold">
+                  Product Unavailable
+                </p>
+              ) : !isVariantActive ? (
+                <p className="text-red-600 font-semibold">
+                  Variant Unavailable
+                </p>
+              ) : isOutOfStock ? (
                 <p className="text-red-600 font-semibold">Out of Stock</p>
               ) : (
                 <p className="text-green-600 font-semibold">{stock} in stock</p>
@@ -387,15 +415,23 @@ const ProductDetail = () => {
             <div className="flex flex-col sm:flex-row gap-4 mb-6">
               <button
                 onClick={handleAddToCart}
-                disabled={isOutOfStock}
+                disabled={isOutOfStock || !isProductActive || !isVariantActive}
                 className={`${
-                  isOutOfStock
+                  isOutOfStock || !isProductActive || !isVariantActive
                     ? "bg-gray-300 cursor-not-allowed"
                     : componentStyles.button.primary
                 } flex-1 flex items-center justify-center space-x-2 text-lg py-3`}
               >
                 <CartIcon />
-                <span>Add to Cart</span>
+                <span>
+                  {!isProductActive
+                    ? "Product Unavailable"
+                    : !isVariantActive
+                    ? "Variant Unavailable"
+                    : isOutOfStock
+                    ? "Out of Stock"
+                    : "Add to Cart"}
+                </span>
               </button>
               <button
                 onClick={handleToggleFavorite}

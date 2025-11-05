@@ -112,6 +112,7 @@ export const createVariant = async (req, res) => {
           stock,
           attributes: attributes || {},
           is_default: isDefault || false,
+          is_active: true, // New variants are active by default
         },
       ])
       .select()
@@ -228,6 +229,84 @@ export const updateVariant = async (req, res) => {
 };
 
 // Delete variant (Admin only)
+// Admin: Toggle variant active status
+export const toggleVariantActive = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_active } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Variant ID is required",
+      });
+    }
+
+    if (typeof is_active !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "is_active must be a boolean value",
+      });
+    }
+
+    // Check if variant exists
+    const { data: variant, error: variantError } = await supabase
+      .from("product_variants")
+      .select("id, name, product_id")
+      .eq("id", id)
+      .single();
+
+    if (variantError || !variant) {
+      return res.status(404).json({
+        success: false,
+        message: "Variant not found",
+      });
+    }
+
+    // Check if product is active - cannot activate variant if product is inactive
+    if (is_active) {
+      const { data: product } = await supabase
+        .from("products")
+        .select("is_active")
+        .eq("id", variant.product_id)
+        .single();
+
+      if (product && product.is_active === false) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Cannot activate variant. Product is inactive. Please activate the product first.",
+        });
+      }
+    }
+
+    // Update active status
+    const { data: updatedVariant, error } = await supabase
+      .from("product_variants")
+      .update({ is_active })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: `Variant ${
+        is_active ? "activated" : "deactivated"
+      } successfully`,
+      data: updatedVariant,
+    });
+  } catch (error) {
+    console.error("Toggle variant active error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to toggle variant active status",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
 export const deleteVariant = async (req, res) => {
   try {
     const { id } = req.params;
