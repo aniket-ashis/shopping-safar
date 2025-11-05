@@ -1,30 +1,44 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import Layout from "../components/layout/Layout.jsx";
+import ProductCard from "../components/features/ProductCard.jsx";
 import { componentStyles, urls } from "../config/constants.js";
 import { useCart } from "../context/CartContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import api from "../utils/api.js";
+import { getIcon } from "../utils/iconMapper.js";
 
 const Shop = () => {
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState(
+    searchParams.get("category") || "all"
+  );
+  const [sortBy, setSortBy] = useState("newest");
   const { addToCart } = useCart();
+  const { isAuthenticated } = useAuth();
+
+  const SearchIcon = getIcon("FaSearch");
 
   useEffect(() => {
     loadProducts();
+    loadCategories();
   }, [selectedCategory]);
 
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const response = await api.get(urls.api.products.list, {
-        params: {
-          category: selectedCategory !== "all" ? selectedCategory : undefined,
-        },
-      });
-      // API returns { success: true, data: [...] }
+      const params = {};
+      if (selectedCategory !== "all") {
+        params.category = selectedCategory;
+      }
+      if (searchTerm) {
+        params.search = searchTerm;
+      }
+      const response = await api.get(urls.api.products.list, { params });
       setProducts(response.data.data || response.data || []);
     } catch (error) {
       console.error("Error loading products:", error);
@@ -34,94 +48,159 @@ const Shop = () => {
     }
   };
 
-  const handleAddToCart = async (productId) => {
-    const result = await addToCart(productId, 1);
-    if (result.success) {
-      alert("Product added to cart!");
-    } else {
-      if (result.requiresAuth) {
-        const shouldRegister = window.confirm(
-          `${result.error}\n\nWould you like to register or login now?`
-        );
-        if (shouldRegister) {
-          window.location.href = "/register";
-        }
-      } else {
-        alert(result.error);
-      }
+  const loadCategories = async () => {
+    try {
+      const response = await api.get(urls.api.products.categories);
+      setCategories(response.data.data || response.data || []);
+    } catch (error) {
+      console.error("Error loading categories:", error);
     }
   };
 
-  const filteredProducts = Array.isArray(products)
-    ? products.filter((product) =>
-        product.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : [];
+  const handleSearch = (e) => {
+    e.preventDefault();
+    loadProducts();
+  };
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="container-custom py-12">
-          <div className="text-center">Loading products...</div>
-        </div>
-      </Layout>
+  const handleAddToCart = async (product) => {
+    if (!isAuthenticated) {
+      const shouldLogin = window.confirm(
+        "Please login to add items to cart. Would you like to login now?"
+      );
+      if (shouldLogin) {
+        window.location.href = "/login";
+      }
+      return;
+    }
+
+    // If product has variants, navigate to product detail page
+    if (product.variantCount > 0) {
+      window.location.href = `/product/${product.id}`;
+      return;
+    }
+
+    // Otherwise, add to cart with default variant or no variant
+    const result = await addToCart(
+      product.id,
+      product.defaultVariantId || null,
+      1
     );
-  }
+    if (result.success) {
+      alert("Product added to cart!");
+    } else {
+      alert(result.error || "Failed to add to cart");
+    }
+  };
+
+  const filteredAndSortedProducts = React.useMemo(() => {
+    let filtered = Array.isArray(products)
+      ? products.filter((product) =>
+          product.name.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : [];
+
+    // Sort products
+    switch (sortBy) {
+      case "price-low":
+        filtered.sort((a, b) => (a.minPrice || 0) - (b.minPrice || 0));
+        break;
+      case "price-high":
+        filtered.sort((a, b) => (b.minPrice || 0) - (a.minPrice || 0));
+        break;
+      case "name":
+        filtered.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      default:
+        // newest (default)
+        filtered.sort(
+          (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+        );
+    }
+
+    return filtered;
+  }, [products, searchTerm, sortBy]);
 
   return (
     <Layout>
-      <div className="container-custom py-8">
-        <h1 className="text-3xl font-bold mb-8">Shop</h1>
+      <div className="container-custom py-4 md:py-8 px-4 md:px-0">
+        <h1 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Shop</h1>
 
-        {/* Search and Filter */}
-        <div className="mb-8 flex flex-col md:flex-row gap-4">
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className={componentStyles.input.default}
-          />
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className={componentStyles.input.default}
-          >
-            <option value="all">All Categories</option>
-            <option value="electronics">Electronics</option>
-            <option value="clothing">Clothing</option>
-            <option value="books">Books</option>
-            <option value="home">Home & Garden</option>
-          </select>
-        </div>
-
-        {/* Products Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => (
-            <div key={product.id} className={componentStyles.card.hover}>
-              <Link to={`/product/${product.id}`}>
-                <img
-                  src={product.image || "/placeholder.jpg"}
-                  alt={product.name}
-                  className="w-full h-48 object-cover rounded-lg mb-4"
-                />
-                <h3 className="text-lg font-semibold mb-2">{product.name}</h3>
-                <p className="text-gray-600 mb-2">${product.price}</p>
-              </Link>
-              <button
-                onClick={() => handleAddToCart(product.id)}
-                className={`${componentStyles.button.primary} w-full mt-4`}
-              >
-                Add to Cart
-              </button>
+        {/* Search, Filter, and Sort */}
+        <div className="mb-6 md:mb-8 space-y-4">
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className={`${componentStyles.input.default} w-full pl-10`}
+              />
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
-          ))}
+            <button type="submit" className={componentStyles.button.primary}>
+              Search
+            </button>
+          </form>
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                loadProducts();
+              }}
+              className={`${componentStyles.input.default} flex-1`}
+            >
+              <option value="all">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.name?.toLowerCase()}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className={componentStyles.input.default}
+            >
+              <option value="newest">Newest First</option>
+              <option value="price-low">Price: Low to High</option>
+              <option value="price-high">Price: High to Low</option>
+              <option value="name">Name: A to Z</option>
+            </select>
+          </div>
         </div>
 
-        {filteredProducts.length === 0 && (
+        {/* Loading State */}
+        {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-600">No products found.</p>
+            <p className="text-gray-600">Loading products...</p>
           </div>
+        ) : (
+          <>
+            {/* Products Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+              {filteredAndSortedProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onAddToCart={handleAddToCart}
+                />
+              ))}
+            </div>
+
+            {/* Empty State */}
+            {filteredAndSortedProducts.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-gray-600 text-lg">
+                  No products found. Try adjusting your search or filters.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Layout>

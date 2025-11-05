@@ -133,7 +133,7 @@ export const siteInfo = {
   description:
     "Discover amazing products at unbeatable prices. Shop the latest trends and find everything you need.",
   email: "contact@shoppingsafari.com",
-  phone: "+1 (555) 123-4567",
+  phone: "+91 9204559244",
   address: {
     street: "123 Commerce Street",
     city: "New York",
@@ -294,6 +294,7 @@ export const urls = {
     policies: "/policies",
     catalog: "/catalog",
     profile: "/profile",
+    admin: "/admin",
   },
   // Backend API Endpoints
   api: {
@@ -329,6 +330,22 @@ export const urls = {
       profile: "/users/profile",
       update: "/users/profile",
       addresses: "/users/addresses",
+    },
+    variants: {
+      list: "/variants/product/:productId",
+      detail: "/variants/:id",
+    },
+    favorites: {
+      list: "/favorites",
+      add: "/favorites",
+      check: "/favorites/check/:productId",
+      remove: "/favorites/:productId",
+    },
+    reviews: {
+      list: "/reviews/product/:productId",
+      create: "/reviews/product/:productId",
+      update: "/reviews/:id",
+      delete: "/reviews/:id",
     },
   },
 };

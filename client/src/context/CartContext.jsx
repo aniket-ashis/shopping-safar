@@ -49,10 +49,11 @@ export const CartProvider = ({ children }) => {
     }
   }, []);
 
-  const addToCart = async (productId, quantity = 1) => {
+  const addToCart = async (productId, variantId = null, quantity = 1) => {
     try {
       const response = await api.post(urls.api.cart.add, {
         productId,
+        variantId,
         quantity,
       });
       setCartItems(response.data.items || []);

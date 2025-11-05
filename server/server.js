@@ -8,6 +8,9 @@ import productRoutes from "./routes/products.js";
 import cartRoutes from "./routes/cart.js";
 import orderRoutes from "./routes/orders.js";
 import userRoutes from "./routes/users.js";
+import variantRoutes from "./routes/variants.js";
+import favoriteRoutes from "./routes/favorites.js";
+import reviewRoutes from "./routes/reviews.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,6 +26,9 @@ app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/variants", variantRoutes);
+app.use("/api/favorites", favoriteRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

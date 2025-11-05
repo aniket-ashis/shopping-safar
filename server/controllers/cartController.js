@@ -19,7 +19,8 @@ export const getCart = async (req, res) => {
       .select(
         `
         *,
-        product:products(*)
+        product:products(*),
+        variant:product_variants(*)
       `
       )
       .eq("user_id", userId);
@@ -44,7 +45,7 @@ export const getCart = async (req, res) => {
 
 export const addToCart = async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
+    const { productId, variantId, quantity } = req.body;
     const userId = req.user.userId;
     const userRole = req.user.role;
 
@@ -77,15 +78,47 @@ export const addToCart = async (req, res) => {
       });
     }
 
-    // Check if item already in cart
-    const { data: existingItem } = await supabase
+    // If variantId provided, verify it exists and belongs to product
+    if (variantId) {
+      const { data: variant } = await supabase
+        .from("product_variants")
+        .select("id, stock")
+        .eq("id", variantId)
+        .eq("product_id", productId)
+        .single();
+
+      if (!variant) {
+        return res.status(404).json({
+          success: false,
+          message: "Variant not found",
+        });
+      }
+
+      if (variant.stock < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: "Insufficient stock",
+        });
+      }
+    }
+
+    // Check if item already in cart (same product and variant)
+    const existingItemQuery = supabase
       .from("cart_items")
       .select("*")
       .eq("user_id", userId)
-      .eq("product_id", productId)
-      .single();
+      .eq("product_id", productId);
 
-    if (existingItem) {
+    if (variantId) {
+      existingItemQuery.eq("variant_id", variantId);
+    } else {
+      existingItemQuery.is("variant_id", null);
+    }
+
+    const { data: existingItem, error: existingError } =
+      await existingItemQuery.maybeSingle();
+
+    if (existingItem && !existingError) {
       // Update quantity
       const { data: updatedItem, error } = await supabase
         .from("cart_items")
@@ -107,7 +140,8 @@ export const addToCart = async (req, res) => {
         .select(
           `
           *,
-          product:products(*)
+          product:products(*),
+          variant:product_variants(*)
         `
         )
         .eq("user_id", userId);
@@ -126,6 +160,7 @@ export const addToCart = async (req, res) => {
         {
           user_id: userId,
           product_id: productId,
+          variant_id: variantId || null,
           quantity,
         },
       ])
