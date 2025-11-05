@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout.jsx";
-import { componentStyles, urls } from "../config/constants.js";
+import { componentStyles, urls, currency } from "../config/constants.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useModal } from "../context/ModalContext.jsx";
 import api from "../utils/api.js";
@@ -15,6 +15,14 @@ const Admin = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderFilters, setOrderFilters] = useState({
+    status: "",
+    email: "",
+    startDate: "",
+    endDate: "",
+  });
   const [loading, setLoading] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
@@ -73,6 +81,20 @@ const Admin = () => {
   const PackageIcon = getIcon("FaBox");
   const TagIcon = getIcon("FaTag");
   const StarIcon = getIcon("FaStar");
+
+  // Helper to construct full image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+      return imagePath;
+    }
+    if (imagePath.startsWith("/")) {
+      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      return `${apiBase.replace("/api", "")}${imagePath}`;
+    }
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000";
+    return `${apiBase.replace("/api", "")}/${imagePath}`;
+  };
 
   useEffect(() => {
     const checkAdminAccess = async () => {
@@ -198,6 +220,82 @@ const Admin = () => {
     } catch (error) {
       console.error("Error loading brands:", error);
     }
+  };
+
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (orderFilters.status) params.append("status", orderFilters.status);
+      if (orderFilters.email) params.append("email", orderFilters.email);
+      if (orderFilters.startDate)
+        params.append("startDate", orderFilters.startDate);
+      if (orderFilters.endDate) params.append("endDate", orderFilters.endDate);
+
+      const queryString = params.toString();
+      const url = queryString
+        ? `${urls.api.orders.admin.all}?${queryString}`
+        : urls.api.orders.admin.all;
+      const response = await api.get(url);
+      setOrders(response.data.data || response.data || []);
+    } catch (error) {
+      console.error("Error loading orders:", error);
+      showError("Failed to load orders. Please try again.", "Error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      setLoading(true);
+      await api.put(
+        urls.api.orders.admin.updateStatus.replace(":id", orderId),
+        {
+          status: newStatus,
+        }
+      );
+      showSuccess("Order status updated successfully!", "Success");
+      loadOrders();
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, status: newStatus });
+      }
+    } catch (error) {
+      showError(
+        error.response?.data?.message || "Failed to update order status.",
+        "Error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    showConfirmation({
+      title: "Cancel Order",
+      message:
+        "Are you sure you want to cancel this order? This action cannot be undone.",
+      onConfirm: async () => {
+        try {
+          setLoading(true);
+          await api.put(urls.api.orders.admin.cancel.replace(":id", orderId));
+          showSuccess("Order cancelled successfully!", "Success");
+          loadOrders();
+          if (selectedOrder && selectedOrder.id === orderId) {
+            setSelectedOrder(null);
+          }
+        } catch (error) {
+          showError(
+            error.response?.data?.message || "Failed to cancel order.",
+            "Error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      },
+      confirmLabel: "Cancel Order",
+      cancelLabel: "Keep Order",
+    });
   };
 
   const handleProductSubmit = async (e) => {
@@ -645,6 +743,20 @@ const Admin = () => {
             >
               <StarIcon className="inline-block mr-2" />
               Brands
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("orders");
+                loadOrders();
+              }}
+              className={`pb-4 px-2 font-semibold whitespace-nowrap ${
+                activeTab === "orders"
+                  ? "border-b-2 border-primary-main text-primary-main"
+                  : "text-gray-600 hover:text-primary-main"
+              }`}
+            >
+              <PackageIcon className="inline-block mr-2" />
+              Orders
             </button>
           </div>
         </div>
@@ -1565,6 +1677,431 @@ const Admin = () => {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Orders Tab */}
+        {activeTab === "orders" && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl md:text-2xl font-semibold">Orders</h2>
+            </div>
+
+            {/* Filters */}
+            <div className={`${componentStyles.card.default} mb-6`}>
+              <h3 className="font-semibold mb-4">Filter Orders</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block mb-2 text-sm font-semibold">
+                    Status
+                  </label>
+                  <select
+                    value={orderFilters.status}
+                    onChange={(e) =>
+                      setOrderFilters({
+                        ...orderFilters,
+                        status: e.target.value,
+                      })
+                    }
+                    className={componentStyles.input.default}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="processing">Processing</option>
+                    <option value="shipped">Shipped</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-2 text-sm font-semibold">
+                    Customer Email
+                  </label>
+                  <input
+                    type="email"
+                    value={orderFilters.email}
+                    onChange={(e) =>
+                      setOrderFilters({
+                        ...orderFilters,
+                        email: e.target.value,
+                      })
+                    }
+                    placeholder="Search by email"
+                    className={componentStyles.input.default}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-2 text-sm font-semibold">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={orderFilters.startDate}
+                    onChange={(e) =>
+                      setOrderFilters({
+                        ...orderFilters,
+                        startDate: e.target.value,
+                      })
+                    }
+                    className={componentStyles.input.default}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-2 text-sm font-semibold">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={orderFilters.endDate}
+                    onChange={(e) =>
+                      setOrderFilters({
+                        ...orderFilters,
+                        endDate: e.target.value,
+                      })
+                    }
+                    className={componentStyles.input.default}
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={loadOrders}
+                  className={componentStyles.button.primary}
+                >
+                  Apply Filters
+                </button>
+                <button
+                  onClick={() => {
+                    setOrderFilters({
+                      status: "",
+                      email: "",
+                      startDate: "",
+                      endDate: "",
+                    });
+                    loadOrders();
+                  }}
+                  className={componentStyles.button.outline}
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+
+            {/* Orders List */}
+            {loading ? (
+              <div className="text-center py-8">Loading orders...</div>
+            ) : orders.length === 0 ? (
+              <div
+                className={`${componentStyles.card.default} text-center py-12`}
+              >
+                <PackageIcon className="text-6xl text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-600">No orders found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.map((order) => (
+                  <div
+                    key={order.id}
+                    className={`${
+                      componentStyles.card.default
+                    } cursor-pointer hover:shadow-lg transition-shadow ${
+                      selectedOrder?.id === order.id
+                        ? "ring-2 ring-primary-main"
+                        : ""
+                    }`}
+                    onClick={() => setSelectedOrder(order)}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-bold text-lg">
+                            Order #{order.id.substring(0, 8).toUpperCase()}
+                          </h3>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
+                              order.status === "pending"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : order.status === "processing"
+                                ? "bg-blue-100 text-blue-800"
+                                : order.status === "shipped"
+                                ? "bg-purple-100 text-purple-800"
+                                : order.status === "delivered"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {order.status || "Pending"}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600 space-y-1">
+                          <p>
+                            <strong>Customer:</strong>{" "}
+                            {order.user?.name || "N/A"} (
+                            {order.user?.email || order.shipping_email})
+                          </p>
+                          <p>
+                            <strong>Date:</strong>{" "}
+                            {new Date(order.created_at).toLocaleDateString(
+                              "en-IN",
+                              {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )}
+                          </p>
+                          <p>
+                            <strong>Total:</strong> ₹
+                            {parseFloat(order.total || 0).toLocaleString(
+                              "en-IN",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }
+                            )}
+                          </p>
+                          <p>
+                            <strong>Items:</strong>{" "}
+                            {order.order_items?.length || 0}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <select
+                          value={order.status}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleUpdateOrderStatus(order.id, e.target.value);
+                          }}
+                          className={`${componentStyles.input.default} text-sm`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="processing">Processing</option>
+                          <option value="shipped">Shipped</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                        {order.status !== "cancelled" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelOrder(order.id);
+                            }}
+                            className={`${componentStyles.button.danger} text-sm`}
+                          >
+                            Cancel Order
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Order Detail View */}
+            {selectedOrder && (
+              <div className={`${componentStyles.card.default} mt-6`}>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold">
+                    Order Details - #
+                    {selectedOrder.id.substring(0, 8).toUpperCase()}
+                  </h3>
+                  <button
+                    onClick={() => setSelectedOrder(null)}
+                    className={componentStyles.button.outline}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <h4 className="font-semibold mb-2">Customer Information</h4>
+                    <div className="text-sm space-y-1 text-gray-600">
+                      <p>
+                        <strong>Name:</strong>{" "}
+                        {selectedOrder.user?.name ||
+                          selectedOrder.shipping_name ||
+                          "N/A"}
+                      </p>
+                      <p>
+                        <strong>Email:</strong>{" "}
+                        {selectedOrder.user?.email ||
+                          selectedOrder.shipping_email ||
+                          "N/A"}
+                      </p>
+                      <p>
+                        <strong>Phone:</strong>{" "}
+                        {selectedOrder.user?.phone ||
+                          selectedOrder.shipping_phone ||
+                          "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-2">Shipping Address</h4>
+                    <div className="text-sm text-gray-600">
+                      <p>{selectedOrder.shipping_name || ""}</p>
+                      <p>{selectedOrder.shipping_address || ""}</p>
+                      <p>
+                        {selectedOrder.shipping_city || ""},{" "}
+                        {selectedOrder.shipping_state || ""}{" "}
+                        {selectedOrder.shipping_zip || ""}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h4 className="font-semibold mb-4 text-lg">Order Items</h4>
+                  <div className="space-y-4">
+                    {selectedOrder.order_items?.map((item) => {
+                      // Get variant image if available, otherwise product image
+                      let itemImage = null;
+
+                      // Priority 1: Variant images from order item's variant object
+                      if (
+                        item.variant?.images &&
+                        item.variant.images.length > 0
+                      ) {
+                        itemImage = getImageUrl(
+                          item.variant.images[0].image_url
+                        );
+                      }
+                      // Priority 2: Product main image
+                      else if (item.product?.main_image) {
+                        itemImage = getImageUrl(item.product.main_image);
+                      }
+                      // Priority 3: Product image fallback
+                      else if (item.product?.image) {
+                        itemImage = getImageUrl(item.product.image);
+                      }
+
+                      const variantName =
+                        item.variant_name || item.variant?.name || null;
+                      const productName = item.product?.name || "Product";
+                      const hasVariant = !!variantName;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex flex-col md:flex-row gap-4 p-4 border border-gray-200 rounded-lg hover:border-primary-main transition-colors"
+                        >
+                          {/* Product/Variant Image - Larger and more prominent */}
+                          <div className="flex-shrink-0">
+                            {itemImage ? (
+                              <img
+                                src={itemImage}
+                                alt={`${productName}${
+                                  variantName ? ` - ${variantName}` : ""
+                                }`}
+                                className="w-32 h-32 md:w-40 md:h-40 object-cover rounded-lg border-2 border-gray-200 shadow-md"
+                                onError={(e) => {
+                                  if (e.target.dataset.error === "true") {
+                                    e.target.style.display = "none";
+                                    return;
+                                  }
+                                  e.target.dataset.error = "true";
+                                  const canvas =
+                                    document.createElement("canvas");
+                                  canvas.width = 160;
+                                  canvas.height = 160;
+                                  const ctx = canvas.getContext("2d");
+                                  ctx.fillStyle = "#f3f4f6";
+                                  ctx.fillRect(0, 0, 160, 160);
+                                  ctx.fillStyle = "#9ca3af";
+                                  ctx.font = "14px Arial";
+                                  ctx.textAlign = "center";
+                                  ctx.fillText("No Image", 80, 80);
+                                  e.target.src = canvas.toDataURL();
+                                }}
+                              />
+                            ) : (
+                              <div className="w-32 h-32 md:w-40 md:h-40 bg-gray-200 flex items-center justify-center rounded-lg border-2 border-gray-300">
+                                <span className="text-gray-400 text-sm">
+                                  No Image
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Product and Variant Information */}
+                          <div className="flex-grow min-w-0">
+                            <div className="mb-3">
+                              <h5 className="font-bold text-lg text-gray-900 mb-2">
+                                {productName}
+                              </h5>
+                              {hasVariant && (
+                                <div className="inline-flex items-center gap-2 mb-2 px-3 py-1 bg-primary-main/10 rounded-md border border-primary-main/20">
+                                  <span className="text-xs font-semibold text-primary-main uppercase tracking-wide">
+                                    Variant:
+                                  </span>
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {variantName}
+                                  </span>
+                                </div>
+                              )}
+                              {item.variant?.sku && (
+                                <p className="text-xs text-gray-500 mb-1">
+                                  <strong>SKU:</strong> {item.variant.sku}
+                                </p>
+                              )}
+                              {item.product?.category && (
+                                <p className="text-xs text-gray-500">
+                                  <strong>Category:</strong>{" "}
+                                  {typeof item.product.category === "object"
+                                    ? item.product.category.name
+                                    : item.product.category}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                              <div className="text-sm text-gray-600">
+                                <span className="font-medium">Quantity:</span>{" "}
+                                <span className="font-bold text-primary-main">
+                                  {item.quantity}
+                                </span>{" "}
+                                × {currency.format(item.price || 0)}
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-500">
+                                  Item Total:
+                                </p>
+                                <p className="font-bold text-primary-main text-xl">
+                                  {currency.format(
+                                    (item.price || 0) * item.quantity
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-bold">Total:</span>
+                    <span className="text-xl font-bold text-primary-main">
+                      ₹
+                      {parseFloat(selectedOrder.total || 0).toLocaleString(
+                        "en-IN",
+                        {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

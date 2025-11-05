@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS orders (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   total DECIMAL(10, 2) NOT NULL,
   status TEXT DEFAULT 'pending',
+  payment_method TEXT DEFAULT 'cash_on_delivery',
   shipping_address TEXT,
   shipping_city TEXT,
   shipping_state TEXT,

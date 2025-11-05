@@ -119,10 +119,15 @@ export const CartProvider = ({ children }) => {
   };
 
   const getCartTotal = () => {
-    return cartItems.reduce(
-      (total, item) => total + item.product.price * item.quantity,
-      0
-    );
+    return cartItems.reduce((total, item) => {
+      // Use variant price if available, otherwise product base_price or price
+      const itemPrice =
+        item.variant?.price ||
+        item.product.base_price ||
+        item.product.price ||
+        0;
+      return total + itemPrice * item.quantity;
+    }, 0);
   };
 
   const getCartItemCount = () => {

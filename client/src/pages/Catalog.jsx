@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import Layout from "../components/layout/Layout.jsx";
 import { componentStyles, urls } from "../config/constants.js";
 import { useCart } from "../context/CartContext.jsx";
+import { useModal } from "../context/ModalContext.jsx";
 import api from "../utils/api.js";
+import ProductCard from "../components/features/ProductCard.jsx";
 
 const Catalog = () => {
   const [products, setProducts] = useState([]);
@@ -11,6 +12,7 @@ const Catalog = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const { addToCart } = useCart();
+  const { showSuccess, showError, showConfirmation } = useModal();
 
   useEffect(() => {
     loadCategories();
@@ -45,20 +47,26 @@ const Catalog = () => {
     }
   };
 
-  const handleAddToCart = async (productId) => {
-    const result = await addToCart(productId, 1);
+  const handleAddToCart = async (product) => {
+    // For catalog page, we add the default product/variant.
+    // If a product has variants, the user will select a specific variant on the ProductDetail page.
+    const variantIdToAdd = product.defaultVariantId || null;
+    const result = await addToCart(product.id, variantIdToAdd, 1);
     if (result.success) {
-      alert("Product added to cart!");
+      showSuccess("Product added to cart!", "Success");
     } else {
       if (result.requiresAuth) {
-        const shouldRegister = window.confirm(
-          `${result.error}\n\nWould you like to register or login now?`
-        );
-        if (shouldRegister) {
-          window.location.href = "/register";
-        }
+        showConfirmation({
+          title: "Authentication Required",
+          message: `${result.error}\n\nWould you like to register or login now?`,
+          onConfirm: () => {
+            window.location.href = "/register";
+          },
+          confirmLabel: "Yes, Register/Login",
+          cancelLabel: "Cancel",
+        });
       } else {
-        alert(result.error);
+        showError(result.error || "Failed to add product to cart.", "Error");
       }
     }
   };
@@ -103,28 +111,11 @@ const Catalog = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {products.map((product) => (
-              <div key={product.id} className={componentStyles.card.hover}>
-                <Link to={`/product/${product.id}`}>
-                  <img
-                    src={product.image || "/placeholder.jpg"}
-                    alt={product.name}
-                    className="w-full h-48 object-cover rounded-lg mb-4"
-                  />
-                  <h3 className="text-lg font-semibold mb-2">{product.name}</h3>
-                  <p className="text-gray-600 mb-2">
-                    {product.description?.substring(0, 100)}...
-                  </p>
-                  <p className="text-xl font-bold text-primary-main mb-2">
-                    ${product.price}
-                  </p>
-                </Link>
-                <button
-                  onClick={() => handleAddToCart(product.id)}
-                  className={`${componentStyles.button.primary} w-full mt-4`}
-                >
-                  Add to Cart
-                </button>
-              </div>
+              <ProductCard
+                key={product.id}
+                product={product}
+                onAddToCart={handleAddToCart}
+              />
             ))}
           </div>
         )}

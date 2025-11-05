@@ -53,6 +53,24 @@ export const theme = {
 };
 
 // ============================================================================
+// CURRENCY CONFIGURATION
+// ============================================================================
+export const currency = {
+  symbol: "₹",
+  code: "INR",
+  name: "Indian Rupee",
+  format: (amount) => {
+    if (amount === null || amount === undefined) return "₹0";
+    const numAmount = typeof amount === "string" ? parseFloat(amount) : amount;
+    if (isNaN(numAmount)) return "₹0";
+    return `₹${numAmount.toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  },
+};
+
+// ============================================================================
 // TYPOGRAPHY - Font Families, Sizes, Weights
 // ============================================================================
 export const typography = {
@@ -128,7 +146,7 @@ export const layout = {
 // SITE METADATA
 // ============================================================================
 export const siteInfo = {
-  name: "Shopping Safari",
+  name: "shopping Safar",
   tagline: "Your Ultimate Shopping Destination",
   description:
     "Discover amazing products at unbeatable prices. Shop the latest trends and find everything you need.",
@@ -148,7 +166,7 @@ export const siteInfo = {
 // ============================================================================
 export const navigation = {
   logo: {
-    text: "Shopping Safari",
+    text: "shopping Safar",
     icon: "FaShoppingBag", // React Icon name
   },
   menuItems: [
@@ -294,6 +312,8 @@ export const urls = {
     policies: "/policies",
     catalog: "/catalog",
     profile: "/profile",
+    orders: "/orders",
+    orderDetail: "/orders/:id",
     admin: "/admin",
   },
   // Backend API Endpoints
@@ -325,6 +345,12 @@ export const urls = {
       list: "/orders",
       detail: "/orders/:id",
       cancel: "/orders/:id/cancel",
+      admin: {
+        all: "/orders/admin/all",
+        detail: "/orders/admin/:id",
+        updateStatus: "/orders/admin/:id/status",
+        cancel: "/orders/admin/:id/cancel",
+      },
     },
     users: {
       profile: "/users/profile",

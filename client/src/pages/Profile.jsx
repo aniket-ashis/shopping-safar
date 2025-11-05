@@ -5,6 +5,7 @@ import { componentStyles, urls } from "../config/constants.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import api from "../utils/api.js";
 import { getIcon } from "../utils/iconMapper.js";
+import { Link } from "react-router-dom";
 
 const Profile = () => {
   const { user, isAuthenticated } = useAuth();
@@ -31,6 +32,14 @@ const Profile = () => {
     country: "United States",
     isDefault: false,
   });
+
+  const UserIcon = getIcon("FaUser");
+  const MapIcon = getIcon("FaMapMarkerAlt");
+  const EditIcon = getIcon("FaEdit");
+  const TrashIcon = getIcon("FaTrash");
+  const PlusIcon = getIcon("FaPlus");
+  const CheckIcon = getIcon("FaCheck");
+  const PackageIcon = getIcon("FaBox");
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -181,13 +190,6 @@ const Profile = () => {
     }
   };
 
-  const UserIcon = getIcon("FaUser");
-  const MapIcon = getIcon("FaMapMarkerAlt");
-  const EditIcon = getIcon("FaEdit");
-  const TrashIcon = getIcon("FaTrash");
-  const PlusIcon = getIcon("FaPlus");
-  const CheckIcon = getIcon("FaCheck");
-
   if (!isAuthenticated) {
     return null;
   }
@@ -224,6 +226,13 @@ const Profile = () => {
               <MapIcon className="inline-block mr-2" />
               Addresses
             </button>
+            <Link
+              to={urls.routes.orders}
+              className="pb-4 px-2 font-semibold whitespace-nowrap text-gray-600 hover:text-primary-main"
+            >
+              <PackageIcon className="inline-block mr-2" />
+              Orders
+            </Link>
           </div>
         </div>
 

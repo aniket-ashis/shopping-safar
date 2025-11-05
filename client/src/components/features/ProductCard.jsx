@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { componentStyles } from "../../config/constants.js";
+import { componentStyles, currency } from "../../config/constants.js";
 import { getIcon } from "../../utils/iconMapper.js";
 
 const ProductCard = ({ product, onAddToCart }) => {
@@ -86,7 +86,7 @@ const ProductCard = ({ product, onAddToCart }) => {
         </h3>
         <div className="flex items-center justify-between mb-2">
           <p className="text-lg md:text-xl font-bold text-primary-main">
-            ${price}
+            {currency.format(price)}
             {hasVariants && product.variantCount > 1 && (
               <span className="text-sm text-gray-500 font-normal ml-1">
                 from
