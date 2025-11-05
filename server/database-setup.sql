@@ -29,7 +29,21 @@ CREATE TABLE IF NOT EXISTS categories (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT UNIQUE NOT NULL,
   description TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  slug TEXT UNIQUE,
+  image TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Brands table
+CREATE TABLE IF NOT EXISTS brands (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT UNIQUE NOT NULL,
+  description TEXT,
+  logo TEXT,
+  website TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Products table
@@ -39,8 +53,12 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT,
   base_price DECIMAL(10, 2) NOT NULL,
   main_image TEXT,
-  category TEXT,
-  brand TEXT,
+  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+  brand_id UUID REFERENCES brands(id) ON DELETE SET NULL,
+  slug TEXT UNIQUE,
+  meta_title TEXT,
+  meta_description TEXT,
+  meta_keywords TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -147,7 +165,11 @@ CREATE TABLE IF NOT EXISTS order_items (
 );
 
 -- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_products_brand_id ON products(brand_id);
+CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug);
+CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+CREATE INDEX IF NOT EXISTS idx_brands_name ON brands(name);
 CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_variant_images_variant_id ON product_variant_images(variant_id);
 CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id);
@@ -183,6 +205,14 @@ CREATE TRIGGER update_product_variants_updated_at BEFORE UPDATE ON product_varia
 
 -- Trigger to auto-update updated_at for product_reviews
 CREATE TRIGGER update_product_reviews_updated_at BEFORE UPDATE ON product_reviews
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger to auto-update updated_at for categories
+CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger to auto-update updated_at for brands
+CREATE TRIGGER update_brands_updated_at BEFORE UPDATE ON brands
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert sample categories (optional)

@@ -347,6 +347,20 @@ export const urls = {
       update: "/reviews/:id",
       delete: "/reviews/:id",
     },
+    upload: {
+      productMain: "/upload/product/:productId/main",
+      variantImage: "/upload/product/:productId/variant/:variantId",
+      deleteImage: "/upload/image",
+      deleteVariantImage: "/upload/variant-image/:id",
+    },
+    categories: {
+      list: "/categories",
+      detail: "/categories/:id",
+    },
+    brands: {
+      list: "/brands",
+      detail: "/brands/:id",
+    },
   },
 };
 

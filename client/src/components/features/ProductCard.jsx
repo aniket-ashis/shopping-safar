@@ -7,11 +7,28 @@ const ProductCard = ({ product, onAddToCart }) => {
   const StarIcon = getIcon("FaStar");
   const TagIcon = getIcon("FaTag");
 
+  // Helper to construct full image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    // If it's already a full URL (http/https), return as is
+    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+      return imagePath;
+    }
+    // If it starts with /, it's a local path - construct full URL
+    if (imagePath.startsWith("/")) {
+      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      return `${apiBase.replace("/api", "")}${imagePath}`;
+    }
+    // Otherwise, assume it's a relative path
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000";
+    return `${apiBase.replace("/api", "")}/${imagePath}`;
+  };
+
   const mainImage =
-    product.main_image ||
-    product.image ||
-    product.variants?.[0]?.images?.[0]?.image_url ||
-    "/placeholder.jpg";
+    getImageUrl(product.main_image) ||
+    getImageUrl(product.image) ||
+    getImageUrl(product.variants?.[0]?.images?.[0]?.image_url) ||
+    null;
 
   const price = product.minPrice || product.base_price || product.price;
   const hasVariants = product.variantCount > 0;
@@ -21,15 +38,37 @@ const ProductCard = ({ product, onAddToCart }) => {
     <div className={`${componentStyles.card.hover} relative`}>
       <Link to={`/product/${product.id}`}>
         <div className="relative overflow-hidden rounded-lg mb-4">
-          <img
-            src={mainImage}
-            alt={product.name}
-            className="w-full h-48 md:h-64 object-cover group-hover:scale-110 transition-transform duration-300"
-            onError={(e) => {
-              e.target.src =
-                "https://via.placeholder.com/400x400?text=No+Image";
-            }}
-          />
+          {mainImage ? (
+            <img
+              src={mainImage}
+              alt={product.name}
+              className="w-full h-48 md:h-64 object-cover group-hover:scale-110 transition-transform duration-300"
+              onError={(e) => {
+                // Prevent infinite loop - if already failed, hide the image
+                if (e.target.dataset.error === "true") {
+                  e.target.style.display = "none";
+                  return;
+                }
+                e.target.dataset.error = "true";
+                // Create a simple placeholder using data URL
+                const canvas = document.createElement("canvas");
+                canvas.width = 400;
+                canvas.height = 400;
+                const ctx = canvas.getContext("2d");
+                ctx.fillStyle = "#f3f4f6";
+                ctx.fillRect(0, 0, 400, 400);
+                ctx.fillStyle = "#9ca3af";
+                ctx.font = "20px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("No Image", 200, 200);
+                e.target.src = canvas.toDataURL();
+              }}
+            />
+          ) : (
+            <div className="w-full h-48 md:h-64 bg-gray-200 flex items-center justify-center">
+              <span className="text-gray-400 text-sm">No Image</span>
+            </div>
+          )}
           {isOutOfStock && (
             <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
               Out of Stock
@@ -61,9 +100,9 @@ const ProductCard = ({ product, onAddToCart }) => {
             </span>
           </div>
         </div>
-        {product.brand && (
+        {(product.brand?.name || product.brand) && (
           <p className="text-xs md:text-sm text-gray-500 mb-2">
-            {product.brand}
+            {product.brand?.name || product.brand}
           </p>
         )}
       </Link>

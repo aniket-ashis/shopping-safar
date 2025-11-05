@@ -94,8 +94,24 @@ const Home = () => {
                     alt="Shopping Safari"
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      e.target.src =
-                        "https://via.placeholder.com/800x600/2563eb/ffffff?text=Shopping+Safari";
+                      // Prevent infinite loop
+                      if (e.target.dataset.error === "true") {
+                        e.target.style.display = "none";
+                        return;
+                      }
+                      e.target.dataset.error = "true";
+                      // Create a simple placeholder using data URL
+                      const canvas = document.createElement("canvas");
+                      canvas.width = 800;
+                      canvas.height = 600;
+                      const ctx = canvas.getContext("2d");
+                      ctx.fillStyle = "#2563eb";
+                      ctx.fillRect(0, 0, 800, 600);
+                      ctx.fillStyle = "#ffffff";
+                      ctx.font = "32px Arial";
+                      ctx.textAlign = "center";
+                      ctx.fillText("Shopping Safari", 400, 300);
+                      e.target.src = canvas.toDataURL();
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>

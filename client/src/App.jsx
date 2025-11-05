@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { CartProvider } from "./context/CartContext.jsx";
+import { ModalProvider } from "./context/ModalContext.jsx";
 import { urls } from "./config/constants.js";
 
 // Pages
@@ -25,28 +26,30 @@ function App() {
   return (
     <AuthProvider>
       <CartProvider>
-        <Router future={{ v7_relativeSplatPath: true }}>
-          <Routes>
-            <Route path={urls.routes.home} element={<Home />} />
-            <Route path={urls.routes.shop} element={<Shop />} />
-            <Route
-              path={urls.routes.productDetail}
-              element={<ProductDetail />}
-            />
-            <Route path={urls.routes.cart} element={<Cart />} />
-            <Route path={urls.routes.checkout} element={<Checkout />} />
-            <Route path={urls.routes.login} element={<Login />} />
-            <Route path={urls.routes.register} element={<Register />} />
-            <Route path={urls.routes.guest} element={<Guest />} />
-            <Route path={urls.routes.about} element={<About />} />
-            <Route path={urls.routes.contact} element={<Contact />} />
-            <Route path={urls.routes.faq} element={<FAQ />} />
-            <Route path={urls.routes.policies} element={<Policies />} />
-            <Route path={urls.routes.catalog} element={<Catalog />} />
-            <Route path={urls.routes.profile} element={<Profile />} />
-            <Route path={urls.routes.admin} element={<Admin />} />
-          </Routes>
-        </Router>
+        <ModalProvider>
+          <Router future={{ v7_relativeSplatPath: true }}>
+            <Routes>
+              <Route path={urls.routes.home} element={<Home />} />
+              <Route path={urls.routes.shop} element={<Shop />} />
+              <Route
+                path={urls.routes.productDetail}
+                element={<ProductDetail />}
+              />
+              <Route path={urls.routes.cart} element={<Cart />} />
+              <Route path={urls.routes.checkout} element={<Checkout />} />
+              <Route path={urls.routes.login} element={<Login />} />
+              <Route path={urls.routes.register} element={<Register />} />
+              <Route path={urls.routes.guest} element={<Guest />} />
+              <Route path={urls.routes.about} element={<About />} />
+              <Route path={urls.routes.contact} element={<Contact />} />
+              <Route path={urls.routes.faq} element={<FAQ />} />
+              <Route path={urls.routes.policies} element={<Policies />} />
+              <Route path={urls.routes.catalog} element={<Catalog />} />
+              <Route path={urls.routes.profile} element={<Profile />} />
+              <Route path={urls.routes.admin} element={<Admin />} />
+            </Routes>
+          </Router>
+        </ModalProvider>
       </CartProvider>
     </AuthProvider>
   );

@@ -2,11 +2,24 @@ import { supabase } from "../utils/supabase.js";
 
 export const getProducts = async (req, res) => {
   try {
-    let query = supabase.from("products").select("*");
+    let query = supabase.from("products").select(`
+        *,
+        category:categories(id, name, slug),
+        brand:brands(id, name, logo)
+      `);
 
-    // Filter by category if provided
+    // Filter by category if provided (supports both category_id and category name/slug)
     if (req.query.category) {
-      query = query.eq("category", req.query.category);
+      // Try to find category by slug or name
+      const { data: category } = await supabase
+        .from("categories")
+        .select("id")
+        .or(`slug.eq.${req.query.category},name.ilike.%${req.query.category}%`)
+        .single();
+
+      if (category) {
+        query = query.eq("category_id", category.id);
+      }
     }
 
     // Search functionality
@@ -27,8 +40,27 @@ export const getProducts = async (req, res) => {
       (products || []).map(async (product) => {
         const { data: variants } = await supabase
           .from("product_variants")
-          .select("id, stock, price, is_default")
-          .eq("product_id", product.id);
+          .select("id, name, stock, price, sku, is_default, attributes")
+          .eq("product_id", product.id)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true });
+
+        // Get images for each variant
+        const variantsWithImages = await Promise.all(
+          (variants || []).map(async (variant) => {
+            const { data: images } = await supabase
+              .from("product_variant_images")
+              .select("*")
+              .eq("variant_id", variant.id)
+              .order("is_primary", { ascending: false })
+              .order("display_order", { ascending: true });
+
+            return {
+              ...variant,
+              images: images || [],
+            };
+          })
+        );
 
         const totalStock =
           variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0;
@@ -44,6 +76,7 @@ export const getProducts = async (req, res) => {
           variantCount: variants?.length || 0,
           minPrice,
           defaultVariantId: defaultVariant?.id,
+          variants: variantsWithImages, // Include full variant data with images
         };
       })
     );
@@ -68,7 +101,13 @@ export const getProductById = async (req, res) => {
 
     const { data: product, error } = await supabase
       .from("products")
-      .select("*")
+      .select(
+        `
+        *,
+        category:categories(id, name, slug),
+        brand:brands(id, name, logo)
+      `
+      )
       .eq("id", id)
       .single();
 
@@ -140,6 +179,8 @@ export const getProductById = async (req, res) => {
   }
 };
 
+// Note: getCategories moved to categoryController.js
+// This endpoint is kept for backward compatibility
 export const getCategories = async (req, res) => {
   try {
     const { data: categories, error } = await supabase
@@ -165,22 +206,69 @@ export const getCategories = async (req, res) => {
   }
 };
 
+// Generate slug from name
+const generateSlug = (name) => {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+};
+
 // Admin: Create product
 export const createProduct = async (req, res) => {
   try {
-    const { name, description, base_price, category, brand, main_image } =
-      req.body;
+    const {
+      name,
+      description,
+      base_price,
+      category_id,
+      brand_id,
+      main_image,
+      slug,
+      meta_title,
+      meta_description,
+      meta_keywords,
+    } = req.body;
+
+    if (!name || !base_price) {
+      return res.status(400).json({
+        success: false,
+        message: "Product name and base price are required",
+      });
+    }
+
+    const productSlug = slug || generateSlug(name);
+
+    // Check if slug already exists
+    const { data: existingSlug } = await supabase
+      .from("products")
+      .select("id")
+      .eq("slug", productSlug)
+      .single();
+
+    if (existingSlug) {
+      return res.status(400).json({
+        success: false,
+        message: "Product with this slug already exists",
+      });
+    }
 
     const { data: product, error } = await supabase
       .from("products")
       .insert([
         {
           name,
-          description,
+          description: description || null,
           base_price,
-          category,
-          brand,
-          main_image,
+          category_id: category_id || null,
+          brand_id: brand_id || null,
+          main_image: main_image || null,
+          slug: productSlug,
+          meta_title: meta_title || null,
+          meta_description: meta_description || null,
+          meta_keywords: meta_keywords || null,
         },
       ])
       .select()
@@ -207,31 +295,77 @@ export const createProduct = async (req, res) => {
 export const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, base_price, category, brand, main_image } =
-      req.body;
+    const {
+      name,
+      description,
+      base_price,
+      category_id,
+      brand_id,
+      main_image,
+      slug,
+      meta_title,
+      meta_description,
+      meta_keywords,
+    } = req.body;
 
-    const { data: product, error } = await supabase
+    // Check if product exists
+    const { data: existing } = await supabase
       .from("products")
-      .update({
-        name,
-        description,
-        base_price,
-        category,
-        brand,
-        main_image,
-      })
+      .select("id, name, slug")
       .eq("id", id)
-      .select()
       .single();
 
-    if (error) throw error;
-
-    if (!product) {
+    if (!existing) {
       return res.status(404).json({
         success: false,
         message: "Product not found",
       });
     }
+
+    // Handle slug update
+    let productSlug = slug || existing.slug;
+    if (name && !slug) {
+      productSlug = generateSlug(name);
+    }
+
+    // Check if slug is being changed and if new slug exists
+    if (productSlug !== existing.slug) {
+      const { data: slugExists } = await supabase
+        .from("products")
+        .select("id")
+        .eq("slug", productSlug)
+        .neq("id", id)
+        .single();
+
+      if (slugExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Product with this slug already exists",
+        });
+      }
+    }
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (base_price !== undefined) updateData.base_price = base_price;
+    if (category_id !== undefined) updateData.category_id = category_id;
+    if (brand_id !== undefined) updateData.brand_id = brand_id;
+    if (main_image !== undefined) updateData.main_image = main_image;
+    if (productSlug) updateData.slug = productSlug;
+    if (meta_title !== undefined) updateData.meta_title = meta_title;
+    if (meta_description !== undefined)
+      updateData.meta_description = meta_description;
+    if (meta_keywords !== undefined) updateData.meta_keywords = meta_keywords;
+
+    const { data: product, error } = await supabase
+      .from("products")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
 
     res.json({
       success: true,

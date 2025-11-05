@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout.jsx";
 import ImageGallery from "../components/features/ImageGallery.jsx";
@@ -155,6 +155,62 @@ const ProductDetail = () => {
     }
   };
 
+  // Helper to construct full image URL (defined outside useMemo so it can be reused)
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    // If it's already a full URL (http/https), return as is
+    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+      return imagePath;
+    }
+    // If it starts with /, it's a local path - construct full URL
+    if (imagePath.startsWith("/")) {
+      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      return `${apiBase.replace("/api", "")}${imagePath}`;
+    }
+    // Otherwise, assume it's a relative path
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000";
+    return `${apiBase.replace("/api", "")}/${imagePath}`;
+  };
+
+  // Determine which images to show based on selected variant
+  // This will update automatically when selectedVariant changes
+  // NOTE: Must be called BEFORE any conditional returns to follow Rules of Hooks
+  const images = useMemo(() => {
+    if (!product) return [];
+
+    // If a variant is selected and has images, show ONLY those variant images
+    if (
+      selectedVariant &&
+      selectedVariant.images &&
+      selectedVariant.images.length > 0
+    ) {
+      return selectedVariant.images
+        .map((img) => getImageUrl(img.image_url || img))
+        .filter(Boolean);
+    }
+
+    // If product has variants but none selected yet, show default variant images or product main image
+    if (product.variants && product.variants.length > 0) {
+      const defaultVariant =
+        product.variants.find((v) => v.is_default) || product.variants[0];
+      if (defaultVariant?.images && defaultVariant.images.length > 0) {
+        return defaultVariant.images
+          .map((img) => getImageUrl(img.image_url || img))
+          .filter(Boolean);
+      }
+      // Fallback to product main image if default variant has no images
+      const mainImage =
+        getImageUrl(product.main_image) || getImageUrl(product.image);
+      return mainImage ? [mainImage] : [];
+    }
+
+    // If product has no variants, show product main image
+    const mainImage =
+      getImageUrl(product.main_image) || getImageUrl(product.image);
+    return mainImage ? [mainImage] : [];
+  }, [selectedVariant, product]);
+
+  // Conditional returns MUST come AFTER all hooks
   if (loading) {
     return (
       <Layout>
@@ -175,10 +231,7 @@ const ProductDetail = () => {
     );
   }
 
-  const currentVariant = selectedVariant || product.variants?.[0];
-  const images = currentVariant?.images || [
-    product.main_image || product.image || "/placeholder.jpg",
-  ];
+  const currentVariant = selectedVariant || product?.variants?.[0];
   const price = currentVariant?.price || product.base_price || product.price;
   const stock = currentVariant?.stock || product.totalStock || 0;
   const isOutOfStock = stock === 0;
@@ -366,16 +419,16 @@ const ProductDetail = () => {
             {/* Product Details */}
             <div className="border-t pt-6">
               <div className="space-y-2 text-sm text-gray-600">
-                {product.brand && (
+                {(product.brand?.name || product.brand) && (
                   <div>
                     <span className="font-semibold">Brand:</span>{" "}
-                    {product.brand}
+                    {product.brand?.name || product.brand}
                   </div>
                 )}
-                {product.category && (
+                {(product.category?.name || product.category) && (
                   <div>
                     <span className="font-semibold">Category:</span>{" "}
-                    {product.category}
+                    {product.category?.name || product.category}
                   </div>
                 )}
                 {selectedVariant?.sku && (
