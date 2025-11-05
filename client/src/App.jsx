@@ -18,6 +18,7 @@ import Contact from "./pages/Contact.jsx";
 import FAQ from "./pages/FAQ.jsx";
 import Policies from "./pages/Policies.jsx";
 import Catalog from "./pages/Catalog.jsx";
+import Profile from "./pages/Profile.jsx";
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
             <Route path={urls.routes.faq} element={<FAQ />} />
             <Route path={urls.routes.policies} element={<Policies />} />
             <Route path={urls.routes.catalog} element={<Catalog />} />
+            <Route path={urls.routes.profile} element={<Profile />} />
           </Routes>
         </Router>
       </CartProvider>

@@ -293,6 +293,7 @@ export const urls = {
     faq: "/faq",
     policies: "/policies",
     catalog: "/catalog",
+    profile: "/profile",
   },
   // Backend API Endpoints
   api: {
@@ -327,6 +328,7 @@ export const urls = {
     users: {
       profile: "/users/profile",
       update: "/users/profile",
+      addresses: "/users/addresses",
     },
   },
 };

@@ -84,9 +84,12 @@ const Navbar = () => {
               </>
             ) : (
               <div className="flex items-center space-x-4">
-                <span className="text-gray-700">
+                <Link
+                  to="/profile"
+                  className="text-gray-700 hover:text-primary-main transition-colors"
+                >
                   Hi, {user?.name || "User"}
-                </span>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className={`${componentStyles.button.outline} flex items-center space-x-1`}
@@ -155,9 +158,13 @@ const Navbar = () => {
                 </>
               ) : (
                 <>
-                  <div className="py-2 text-gray-700">
+                  <Link
+                    to="/profile"
+                    className="block py-2 text-gray-700 hover:text-primary-main"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
                     Hi, {user?.name || "User"}
-                  </div>
+                  </Link>
                   <button
                     onClick={() => {
                       handleLogout();
