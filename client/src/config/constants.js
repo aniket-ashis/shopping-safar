@@ -198,7 +198,7 @@ export const navigation = {
   ],
   authButtons: {
     login: {
-      label: "Login",
+      label: "Log in",
       path: "/login",
       icon: "FaSignInAlt",
     },
@@ -448,6 +448,8 @@ export const componentStyles = {
       "border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-semibold py-2 px-4 rounded-lg transition-colors",
     danger:
       "bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors",
+    // Lattice-style button (teal/dark green)
+    cta: "bg-teal-600 hover:bg-teal-700 text-white font-medium py-2.5 px-5 rounded-lg transition-all shadow-sm hover:shadow-md",
   },
   card: {
     default: "bg-white rounded-lg shadow-md p-6 border border-gray-200",
@@ -469,6 +471,66 @@ export const componentStyles = {
       "bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-0.5 rounded-full",
     danger:
       "bg-red-100 text-red-800 text-xs font-semibold px-2.5 py-0.5 rounded-full",
+  },
+  cart: {
+    itemCard:
+      "bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 p-6",
+    itemImage:
+      "w-24 h-24 md:w-32 md:h-32 object-cover rounded-lg border border-gray-200",
+    quantityButton:
+      "w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium text-gray-700",
+    quantityInput:
+      "w-12 h-8 text-center border-0 focus:outline-none focus:ring-0 font-semibold text-gray-900",
+    removeButton:
+      "text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-md transition-all text-sm font-medium",
+    summaryCard:
+      "bg-white rounded-xl shadow-md border border-gray-200 p-6 sticky top-24",
+    emptyState: "text-center py-16 px-4",
+    emptyIcon: "w-24 h-24 mx-auto text-gray-300 mb-4",
+  },
+  home: {
+    hero: {
+      container:
+        "relative min-h-[600px] md:min-h-[700px] flex items-center bg-gradient-to-br from-blue-50 via-white to-purple-50",
+      content: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20",
+      title: "text-4xl md:text-5xl lg:text-6xl font-bold mb-6",
+      subtitle: "text-xl md:text-2xl lg:text-3xl mb-6 font-medium",
+      description: "text-lg md:text-xl text-gray-600 mb-8 max-w-2xl",
+      ctaGroup: "flex flex-col sm:flex-row gap-4",
+    },
+    slider: {
+      container: "bg-white py-8 md:py-12",
+      wrapper: "rounded-2xl overflow-hidden shadow-lg",
+    },
+    featured: {
+      container: "bg-gray-50 py-12 md:py-16",
+      header: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8",
+      tabs: {
+        container: "flex space-x-1 bg-gray-100 p-1 rounded-lg",
+        tab: "flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all",
+        activeTab: "bg-white text-primary-main shadow-sm font-semibold",
+        inactiveTab: "text-gray-600 hover:text-gray-900",
+      },
+      grid: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    },
+    category: {
+      card: "bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg hover:border-primary-main transition-all duration-300 p-6 text-center group",
+      icon: "w-16 h-16 mx-auto mb-4 text-primary-main group-hover:scale-110 transition-transform",
+      name: "text-lg font-semibold text-gray-900",
+    },
+    testimonial: {
+      card: "bg-white rounded-xl shadow-md border border-gray-200 p-6 md:p-8",
+      stars: "flex space-x-1 mb-4",
+      text: "text-gray-600 italic mb-4 text-sm md:text-base",
+      author: "font-semibold text-gray-900",
+    },
+    newsletter: {
+      container:
+        "bg-gradient-to-r from-primary-main to-primary-dark text-white py-12 md:py-16",
+      form: "max-w-md mx-auto flex flex-col sm:flex-row gap-3",
+      input:
+        "flex-1 px-4 py-3 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-white",
+    },
   },
 };
 

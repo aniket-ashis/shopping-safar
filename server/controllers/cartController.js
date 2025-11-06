@@ -34,15 +34,74 @@ export const getCart = async (req, res) => {
       throw error;
     }
 
-    // Fetch variant images for cart items
+    // Filter out unavailable items and track which ones were removed
+    const availableItems = [];
+    const removedItems = [];
+
+    for (const item of cartItems || []) {
+      // Check if product exists and is active
+      if (!item.product || item.product.is_active === false) {
+        removedItems.push({
+          itemId: item.id,
+          reason: item.product
+            ? "Product is currently unavailable"
+            : "Product no longer exists",
+        });
+        // Remove the item from cart
+        await supabase.from("cart_items").delete().eq("id", item.id);
+        continue;
+      }
+
+      // If variant exists, check if it's active and has stock
+      if (item.variant_id) {
+        if (!item.variant || item.variant.is_active === false) {
+          removedItems.push({
+            itemId: item.id,
+            reason: item.variant
+              ? "Variant is currently unavailable"
+              : "Variant no longer exists",
+          });
+          await supabase.from("cart_items").delete().eq("id", item.id);
+          continue;
+        }
+
+        // Check if stock is sufficient
+        if (item.variant.stock < item.quantity) {
+          // Adjust quantity to available stock instead of removing
+          if (item.variant.stock <= 0) {
+            removedItems.push({
+              itemId: item.id,
+              reason: "Out of stock",
+            });
+            await supabase.from("cart_items").delete().eq("id", item.id);
+            continue;
+          } else {
+            // Update quantity to match available stock
+            await supabase
+              .from("cart_items")
+              .update({ quantity: item.variant.stock })
+              .eq("id", item.id);
+            item.quantity = item.variant.stock;
+          }
+        }
+      }
+
+      availableItems.push(item);
+    }
+
+    // Fetch variant images for available cart items
     const cartItemsWithImages = await fetchVariantImages(
       supabase,
-      cartItems || []
+      availableItems
     );
 
     res.json({
       success: true,
       items: cartItemsWithImages,
+      ...(removedItems.length > 0 && {
+        message: `${removedItems.length} item(s) were removed from your cart due to availability changes.`,
+        removedItems,
+      }),
     });
   } catch (error) {
     console.error("Get cart error:", error);
@@ -87,14 +146,25 @@ export const addToCart = async (req, res) => {
     // Check if product exists and is active
     const { data: product, error: productError } = await supabase
       .from("products")
-      .select("id, base_price, price, is_active")
+      .select("id, base_price, is_active")
       .eq("id", productId)
       .single();
 
     if (productError || !product) {
+      console.error("Product lookup error:", {
+        productId,
+        error: productError,
+        productFound: !!product,
+      });
       return res.status(404).json({
         success: false,
         message: "Product not found or no longer available",
+        ...(process.env.NODE_ENV === "development" && {
+          debug: {
+            productId,
+            error: productError?.message,
+          },
+        }),
       });
     }
 

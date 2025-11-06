@@ -208,31 +208,56 @@ export const createOrder = async (req, res) => {
       // Fetch current product data
       const { data: currentProduct, error: productError } = await supabase
         .from("products")
-        .select("id, name, base_price, price")
+        .select("id, name, base_price, is_active")
         .eq("id", productId)
         .single();
 
       if (productError || !currentProduct) {
+        console.error("Product lookup error in order validation:", {
+          productId,
+          error: productError,
+        });
         itemErrors.push(`Product ${productId} no longer available`);
         continue;
       }
 
+      // Check if product is active
+      if (currentProduct.is_active === false) {
+        itemErrors.push(
+          `Product "${currentProduct.name}" is currently unavailable`
+        );
+        continue;
+      }
+
       let currentVariant = null;
-      let itemPrice = currentProduct.base_price || currentProduct.price || 0;
+      let itemPrice = currentProduct.base_price || 0;
       let availableStock = null;
 
       // Fetch variant if provided
       if (variantId) {
         const { data: variant, error: variantError } = await supabase
           .from("product_variants")
-          .select("id, name, price, stock, product_id")
+          .select("id, name, price, stock, product_id, is_active")
           .eq("id", variantId)
           .eq("product_id", productId)
           .single();
 
         if (variantError || !variant) {
+          console.error("Variant lookup error in order validation:", {
+            variantId,
+            productId,
+            error: variantError,
+          });
           itemErrors.push(
-            `Variant ${variantId} no longer available for product ${productId}`
+            `Variant "${variantId}" no longer available for product "${currentProduct.name}"`
+          );
+          continue;
+        }
+
+        // Check if variant is active
+        if (variant.is_active === false) {
+          itemErrors.push(
+            `Variant "${variant.name || variantId}" for product "${currentProduct.name}" is currently unavailable`
           );
           continue;
         }
@@ -244,9 +269,9 @@ export const createOrder = async (req, res) => {
         // Check stock availability
         if (availableStock < quantity) {
           itemErrors.push(
-            `Insufficient stock for ${currentProduct.name}${
+            `Insufficient stock for "${currentProduct.name}"${
               variant.name ? ` (${variant.name})` : ""
-            }. Only ${availableStock} available.`
+            }. Only ${availableStock} available, but ${quantity} requested.`
           );
           continue;
         }

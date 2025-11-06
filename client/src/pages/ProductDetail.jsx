@@ -5,6 +5,7 @@ import ImageGallery from "../components/features/ImageGallery.jsx";
 import { componentStyles, urls } from "../config/constants.js";
 import { useCart } from "../context/CartContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useModal } from "../context/ModalContext.jsx";
 import api from "../utils/api.js";
 import { getIcon } from "../utils/iconMapper.js";
 
@@ -13,6 +14,7 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
+  const { showSuccess, showError, showConfirmation } = useModal();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -106,17 +108,20 @@ const ProductDetail = () => {
 
   const handleAddToCart = async () => {
     if (!isAuthenticated) {
-      const shouldLogin = window.confirm(
-        "Please login to add items to cart. Would you like to login now?"
-      );
-      if (shouldLogin) {
-        navigate("/login");
-      }
+      showConfirmation({
+        title: "Authentication Required",
+        message: "Please login to add items to cart. Would you like to login now?",
+        onConfirm: () => {
+          navigate("/login");
+        },
+        confirmLabel: "Yes, Login",
+        cancelLabel: "Cancel",
+      });
       return;
     }
 
     if (product.variants && product.variants.length > 0 && !selectedVariant) {
-      alert("Please select a variant");
+      showError("Please select a variant before adding to cart", "Variant Required");
       return;
     }
 
@@ -124,12 +129,12 @@ const ProductDetail = () => {
     const result = await addToCart(product.id, variantId, quantity);
 
     if (result.success) {
-      alert("Product added to cart!");
+      showSuccess("Product added to cart!", "Success");
     } else {
       if (result.requiresAuth) {
         navigate("/login");
       } else {
-        alert(result.error || "Failed to add to cart");
+        showError(result.error || "Failed to add to cart", "Error");
       }
     }
   };

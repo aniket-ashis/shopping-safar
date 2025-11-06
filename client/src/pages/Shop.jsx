@@ -5,6 +5,7 @@ import ProductCard from "../components/features/ProductCard.jsx";
 import { componentStyles, urls } from "../config/constants.js";
 import { useCart } from "../context/CartContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useModal } from "../context/ModalContext.jsx";
 import api from "../utils/api.js";
 import { getIcon } from "../utils/iconMapper.js";
 
@@ -20,6 +21,7 @@ const Shop = () => {
   const [sortBy, setSortBy] = useState("newest");
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
+  const { showSuccess, showError, showConfirmation } = useModal();
 
   const SearchIcon = getIcon("FaSearch");
 
@@ -64,12 +66,15 @@ const Shop = () => {
 
   const handleAddToCart = async (product) => {
     if (!isAuthenticated) {
-      const shouldLogin = window.confirm(
-        "Please login to add items to cart. Would you like to login now?"
-      );
-      if (shouldLogin) {
-        window.location.href = "/login";
-      }
+      showConfirmation({
+        title: "Authentication Required",
+        message: "Please login to add items to cart. Would you like to login now?",
+        onConfirm: () => {
+          window.location.href = "/login";
+        },
+        confirmLabel: "Yes, Login",
+        cancelLabel: "Cancel",
+      });
       return;
     }
 
@@ -86,9 +91,9 @@ const Shop = () => {
       1
     );
     if (result.success) {
-      alert("Product added to cart!");
+      showSuccess("Product added to cart!", "Success");
     } else {
-      alert(result.error || "Failed to add to cart");
+      showError(result.error || "Failed to add to cart", "Error");
     }
   };
 
