@@ -181,11 +181,6 @@ export const navigation = {
       icon: "FaStore",
     },
     {
-      label: "Catalog",
-      path: "/catalog",
-      icon: "FaTh",
-    },
-    {
       label: "About",
       path: "/about",
       icon: "FaInfoCircle",
@@ -310,7 +305,6 @@ export const urls = {
     contact: "/contact",
     faq: "/faq",
     policies: "/policies",
-    catalog: "/catalog",
     profile: "/profile",
     orders: "/orders",
     orderDetail: "/orders/:id",
@@ -399,7 +393,6 @@ export const icons = {
   // Navigation
   home: "FaHome",
   shop: "FaStore",
-  catalog: "FaTh",
   about: "FaInfoCircle",
   contact: "FaEnvelope",
   cart: "FaShoppingCart",

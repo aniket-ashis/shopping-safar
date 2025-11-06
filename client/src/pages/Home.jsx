@@ -158,10 +158,10 @@ const Home = () => {
                     <ArrowRightIcon className="w-4 h-4" />
                   </Link>
                   <Link
-                    to={urls.routes.catalog}
+                    to={urls.routes.shop}
                     className={`${componentStyles.button.outline} inline-flex items-center justify-center space-x-2 px-8 py-4 rounded-lg text-lg border-2 border-primary-main text-primary-main hover:bg-primary-main hover:text-white transition-all`}
                   >
-                    <span>Browse Catalog</span>
+                    <span>Browse Shop</span>
                   </Link>
                 </div>
               </div>

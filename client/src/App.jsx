@@ -18,7 +18,6 @@ import About from "./pages/About.jsx";
 import Contact from "./pages/Contact.jsx";
 import FAQ from "./pages/FAQ.jsx";
 import Policies from "./pages/Policies.jsx";
-import Catalog from "./pages/Catalog.jsx";
 import Profile from "./pages/Profile.jsx";
 import Orders from "./pages/Orders.jsx";
 import Admin from "./pages/Admin.jsx";
@@ -45,7 +44,6 @@ function App() {
               <Route path={urls.routes.contact} element={<Contact />} />
               <Route path={urls.routes.faq} element={<FAQ />} />
               <Route path={urls.routes.policies} element={<Policies />} />
-              <Route path={urls.routes.catalog} element={<Catalog />} />
               <Route path={urls.routes.profile} element={<Profile />} />
               <Route path={urls.routes.orders} element={<Orders />} />
               <Route path={urls.routes.orderDetail} element={<Orders />} />
